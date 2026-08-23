@@ -1,40 +1,44 @@
 {
     "songs": [
         {
-            "title": "Shut Up and Dance",
-            "artist": "WALK THE MOON"
+            "title": "Good Life",
+            "artist": "Kanye West feat. T-Pain"
         },
         {
-            "title": "Can't Hold Us",
-            "artist": "Macklemore & Ryan Lewis feat. Ray Dalton"
+            "title": "Golden",
+            "artist": "Jill Scott"
         },
         {
-            "title": "Levitating",
-            "artist": "Dua Lipa"
+            "title": "Love Never Felt So Good",
+            "artist": "Michael Jackson & Justin Timberlake"
         },
         {
-            "title": "Uptown Funk",
-            "artist": "Mark Ronson feat. Bruno Mars"
+            "title": "Good as Hell",
+            "artist": "Lizzo"
         },
         {
-            "title": "I Gotta Feeling",
-            "artist": "Black Eyed Peas"
+            "title": "Happy",
+            "artist": "Pharrell Williams"
         },
         {
-            "title": "24K Magic",
-            "artist": "Bruno Mars"
+            "title": "Put Your Records On",
+            "artist": "Corinne Bailey Rae"
         },
         {
-            "title": "Dog Days Are Over",
-            "artist": "Florence + The Machine"
+            "title": "Before I Let Go",
+            "artist": "Beyoncé"
         },
         {
-            "title": "Mr. Blue Sky",
-            "artist": "Electric Light Orchestra"
+            "title": "Beyond",
+            "artist": "Leon Bridges"
         },
         {
-            "title": "Hey Ya!",
-            "artist": "Outkast"
+            "title": "I Like That",
+            "artist": "Janelle Monáe"
+        },
+        {
+            "title": "Good Days",
+            "artist": "SZA"
         }
     ]
 }

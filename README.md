@@ -11,7 +11,7 @@ The **Mood Profile & Spotify Playlist Generator** creates personalized Spotify p
 1. **Deterministic Mood Selection:** Guides the user through the canonical mood taxonomy to determine a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
 2. **Machine-Readable Prompt Generation:** Produces a structured prompt requesting song recommendations in `json`, `csv`, or `yaml` from an external chatbot.
 3. **Song List Ingestion:** Accepts and validates the machine-readable song recommendations from the chatbot (via interactive paste or file).
-4. **Deterministic Spotify Resolution & Playlist Creation:** Resolves candidate tracks against Spotify's catalog and creates a named Spotify playlist (e.g., `Joy — Excited — Energetic`) populated with all resolved tracks, reporting any unresolved songs clearly.
+4. **Deterministic Spotify Resolution & Playlist Creation:** Resolves candidate tracks against Spotify's catalog and creates a named Spotify playlist (e.g., `Joy — Excited — Energetic — Aug 23, 2026 3:42 PM`) populated with all resolved tracks, reporting any unresolved songs clearly.
 
 ---
 

@@ -4,6 +4,7 @@ import base64
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
@@ -250,7 +251,7 @@ class TestSpotifyIntegration(unittest.TestCase):
 
         result = self.client.create_playlist(profile=self.profile, tracks=tracks)
 
-        self.assertEqual(result.playlist_name, "Joy — Content — Peaceful")
+        self.assertTrue(result.playlist_name.startswith("Joy — Content — Peaceful — "))
         self.assertEqual(result.playlist_id, "playlist_1")
         self.assertEqual(result.success_count, 2)
         self.assertEqual(result.total_recommendations, 2)
@@ -262,6 +263,11 @@ class TestSpotifyIntegration(unittest.TestCase):
             self.mock_http.added_tracks[0]["data"]["uris"],
             ["spotify:track:september123", "spotify:track:weightless456"],
         )
+
+    def test_format_playlist_name_with_timestamp(self):
+        dt = datetime(2026, 8, 23, 15, 42)
+        formatted_name = self.profile.format_playlist_name(timestamp=dt)
+        self.assertEqual(formatted_name, "Joy — Content — Peaceful — Aug 23, 2026 3:42 PM")
 
     def test_create_playlist_with_zero_tracks_raises_error(self):
         with self.assertRaises(SpotifyError):

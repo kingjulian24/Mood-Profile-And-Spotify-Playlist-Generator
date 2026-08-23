@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
@@ -57,9 +58,12 @@ class MoodProfile:
             f"Mood Code: {self.code}"
         )
 
-    def format_playlist_name(self) -> str:
-        """Generate a canonical Spotify playlist name based on the mood hierarchy."""
-        return f"{self.core_emotion} — {self.branch} — {self.specific_emotion}"
+    def format_playlist_name(self, timestamp: Optional[datetime] = None) -> str:
+        """Generate a canonical Spotify playlist name based on the mood hierarchy and timestamp."""
+        dt = timestamp or datetime.now()
+        time_str = dt.strftime("%I:%M %p").lstrip("0")
+        date_str = f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+        return f"{self.core_emotion} — {self.branch} — {self.specific_emotion} — {date_str} {time_str}"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the mood profile to a dictionary matching the schema."""

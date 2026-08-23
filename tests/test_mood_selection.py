@@ -81,7 +81,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertTrue(any("SPOTIFY PLAYLIST CREATED" in out for out in helper.outputs))
         self.assertEqual(len(self.mock_http.created_playlists), 1)
-        self.assertEqual(self.mock_http.created_playlists[0]["name"], "Joy — Excited — Energetic")
+        self.assertTrue(self.mock_http.created_playlists[0]["name"].startswith("Joy — Excited — Energetic — "))
 
     def test_custom_song_count_in_cli(self):
         custom_config = AppConfig(song_count=20, output_format="json")
