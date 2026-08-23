@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0",
+  "name": "Mood Taxonomy and Intensity Scale",
+  "description": "Canonical domain context for mood interpretation in Mood-Based Spotify Playlist Generator",
+  "intensity_scale": {
+    "min": 1,
+    "max": 10,
+    "description": "Represents emotional intensity and energy activation, independent of valence.",
+    "levels": [
+      {
+        "range": [1, 2],
+        "label": "Crisis / Exhausted",
+        "description": "Depleted emotional energy, severe fatigue, or acute overwhelm."
+      },
+      {
+        "range": [3, 4],
+        "label": "Low / Uncomfortable",
+        "description": "Subdued energy, mild unease, sluggishness, or gentle melancholy."
+      },
+      {
+        "range": [5, 6],
+        "label": "Neutral / Baseline",
+        "description": "Moderate, steady energy; equilibrium; contemplative or calm state."
+      },
+      {
+        "range": [7, 8],
+        "label": "Positive / Stable",
+        "description": "High constructive energy, engagement, optimism, or steady excitement."
+      },
+      {
+        "range": [9, 10],
+        "label": "Peak State",
+        "description": "Maximum energy activation, ecstasy, intense exhilaration, or extreme emotional surge."
+      }
+    ]
+  },
+  "taxonomy": {
+    "Joy": {
+      "description": "Feelings of positive valence, contentment, happiness, or high-energy pleasure.",
+      "branches": {
+        "Content": {
+          "description": "Calm, satisfied, or restful positive states.",
+          "specific_emotions": ["Peaceful", "Satisfied"]
+        },
+        "Happy": {
+          "description": "General uplifted, cheerful, and pleased positive states.",
+          "specific_emotions": ["Blissful", "Pleased"]
+        },
+        "Excited": {
+          "description": "High-activation, energetic, and eager positive states.",
+          "specific_emotions": ["Energetic", "Enthusiastic"]
+        }
+      }
+    },
+    "Sadness": {
+      "description": "Feelings of sorrow, depletion, disconnection, or low-activation distress.",
+      "branches": {
+        "Lonely": {
+          "description": "Feelings stemming from social or emotional isolation.",
+          "specific_emotions": ["Isolated", "Abandoned"]
+        },
+        "Vulnerable": {
+          "description": "Feelings of emotional exposure, delicate sensitivity, or insecurity.",
+          "specific_emotions": ["Fragile", "Insecure"]
+        },
+        "Sluggish": {
+          "description": "Low physical or emotional energy, heaviness, and fatigue.",
+          "specific_emotions": ["Heavy", "Tired"]
+        }
+      }
+    },
+    "Anger": {
+      "description": "Feelings of antagonism, frustration, grievance, or hostile activation.",
+      "branches": {
+        "Irritated": {
+          "description": "Low-to-moderate friction, annoyance, or agitation.",
+          "specific_emotions": ["Annoyed", "Frustrated"]
+        },
+        "Resentful": {
+          "description": "Lingering bitterness, envy, or feelings of unfairness.",
+          "specific_emotions": ["Envious", "Bitter"]
+        },
+        "Furious": {
+          "description": "High-intensity rage, outrage, and aggressive energy.",
+          "specific_emotions": ["Enraged", "Hostile"]
+        }
+      }
+    },
+    "Fear": {
+      "description": "Feelings of anticipation of threat, uncertainty, or vulnerability.",
+      "branches": {
+        "Anxious": {
+          "description": "Nervous apprehension, cognitive overwhelm, and restlessness.",
+          "specific_emotions": ["Overwhelmed", "Worried"]
+        },
+        "Scared": {
+          "description": "Direct acute fear, alarm, or feeling defenseless.",
+          "specific_emotions": ["Terrified", "Helpless"]
+        },
+        "Insecure": {
+          "description": "Feelings of inadequacy, self-doubt, or perceived inferiority.",
+          "specific_emotions": ["Inadequate", "Inferior"]
+        }
+      }
+    },
+    "Disgust": {
+      "description": "Feelings of aversion, revulsion, or critical disapproval.",
+      "branches": {
+        "Repelled": {
+          "description": "Visceral aversion, feeling nauseated or shocked.",
+          "specific_emotions": ["Horrified", "Nauseated"]
+        },
+        "Disapproving": {
+          "description": "Moral or aesthetic disapproval, judgment, and disappointment.",
+          "specific_emotions": ["Judgmental", "Disappointed"]
+        }
+      }
+    },
+    "Surprise": {
+      "description": "Response to unexpected events, sudden realizations, or cognitive shift.",
+      "branches": {
+        "Amazed": {
+          "description": "Positive or neutral wonder, awe, and astonishment.",
+          "specific_emotions": ["Astonished", "Awed"]
+        },
+        "Confused": {
+          "description": "Disorientation, ambiguity, and perplexity.",
+          "specific_emotions": ["Disoriented", "Perplexed"]
+        }
+      }
+    }
+  }
+}

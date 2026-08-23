@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExecutionTrace",
+  "type": "object",
+  "description": "End-to-end execution trace record logging all stages of the Context System Design lifecycle.",
+  "required": [
+    "trace_id",
+    "timestamp",
+    "user_input",
+    "mood_interpretation",
+    "user_verification",
+    "verified_mood",
+    "candidates_generated_count",
+    "candidates_verified_count",
+    "selected_tracks",
+    "playlist_created"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Unique identifier for this generation run."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user_input": {
+      "type": "string",
+      "description": "Original natural-language description from user."
+    },
+    "mood_interpretation": {
+      "type": "object",
+      "description": "AI inferred mood."
+    },
+    "user_verification": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["confirmed", "corrected", "clarified"]
+        },
+        "user_feedback": { "type": "string" }
+      }
+    },
+    "verified_mood": {
+      "type": "object",
+      "description": "Authoritative mood used for recommendation."
+    },
+    "candidates_generated_count": { "type": "integer" },
+    "candidates_verified_count": { "type": "integer" },
+    "selected_tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "artist", "spotify_uri"],
+        "properties": {
+          "title": { "type": "string" },
+          "artist": { "type": "string" },
+          "spotify_uri": { "type": "string" }
+        }
+      }
+    },
+    "playlist_created": { "type": "boolean" },
+    "playlist_id": { "type": "string" },
+    "playlist_url": { "type": "string" }
+  }
+}
