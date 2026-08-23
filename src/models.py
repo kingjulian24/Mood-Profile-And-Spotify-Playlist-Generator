@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 import json
-from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
 
 @dataclass(frozen=True)
@@ -32,12 +32,12 @@ class CoreEmotion:
 
 
 @dataclass
-class MoodSelection:
-    """Structured representation of a user's selected mood and intensity."""
+class MoodProfile:
+    """Structured representation of a user's selected mood profile."""
+    intensity: int
     core_emotion: str
     branch: str
     specific_emotion: str
-    intensity: int
     code: str
     intensity_label: str = ""
     intensity_description: str = ""
@@ -45,14 +45,26 @@ class MoodSelection:
     branch_index: int = 1
     specific_index: int = 1
 
+    def format_profile(self) -> str:
+        """Format the mood profile summary block."""
+        return (
+            "Mood Profile\n"
+            "-------------\n"
+            f"Intensity: {self.intensity}\n"
+            f"Core Emotion: {self.core_emotion}\n"
+            f"Branch: {self.branch}\n"
+            f"Specific Emotion: {self.specific_emotion}\n"
+            f"Mood Code: {self.code}"
+        )
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert the mood selection to a dictionary matching application schemas."""
+        """Convert the mood profile to a dictionary matching the schema."""
         return {
-            "code": self.code,
             "intensity": self.intensity,
             "core_emotion": self.core_emotion,
             "branch": self.branch,
             "specific_emotion": self.specific_emotion,
+            "code": self.code,
             "intensity_label": self.intensity_label,
             "intensity_description": self.intensity_description,
             "taxonomy_path": {
@@ -66,15 +78,9 @@ class MoodSelection:
         }
 
     def to_json(self, indent: int = 2) -> str:
-        """Convert the mood selection to a formatted JSON string."""
+        """Convert the mood profile to a formatted JSON string."""
         return json.dumps(self.to_dict(), indent=indent)
 
-    def format_tree(self) -> str:
-        """Render a formatted ASCII hierarchy tree of the selected mood."""
-        return (
-            f"{self.core_emotion}\n"
-            f"└── {self.branch}\n"
-            f"    └── {self.specific_emotion}\n\n"
-            f"Intensity: {self.intensity}/10 ({self.intensity_label})\n"
-            f"Mood Code: {self.code}"
-        )
+
+# Alias for backward compatibility if needed
+MoodSelection = MoodProfile

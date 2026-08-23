@@ -1,10 +1,10 @@
-"""Tests for MoodTaxonomy loading, traversal, and code construction/parsing."""
+"""Tests for MoodTaxonomy loading, traversal, and profile/code construction."""
 
 import unittest
 from pathlib import Path
 
 from src.taxonomy import MoodTaxonomy
-from src.models import MoodSelection
+from src.models import MoodProfile
 
 
 class TestMoodTaxonomy(unittest.TestCase):
@@ -39,11 +39,9 @@ class TestMoodTaxonomy(unittest.TestCase):
         joy_branches = self.taxonomy.get_branches("Joy")
         self.assertEqual(joy_branches, ["Content", "Happy", "Excited"])
 
-        # By index
         branch_3 = self.taxonomy.get_branch("Joy", 3)
         self.assertEqual(branch_3.name, "Excited")
 
-        # Invalid index & name
         with self.assertRaises(IndexError):
             self.taxonomy.get_branch("Joy", 4)
         with self.assertRaises(KeyError):
@@ -53,7 +51,6 @@ class TestMoodTaxonomy(unittest.TestCase):
         specifics = self.taxonomy.get_specific_emotions("Joy", "Excited")
         self.assertEqual(specifics, ["Energetic", "Enthusiastic"])
 
-        # By 1-based index
         specific_1 = self.taxonomy.get_specific_emotion("Joy", "Excited", 1)
         self.assertEqual(specific_1, "Energetic")
 
@@ -64,7 +61,6 @@ class TestMoodTaxonomy(unittest.TestCase):
             self.taxonomy.get_specific_emotion("Joy", "Excited", "InvalidSpecific")
 
     def test_intensity_validation_and_labels(self):
-        # Valid intensities
         label, desc = self.taxonomy.get_intensity_info(1)
         self.assertEqual(label, "Crisis / Exhausted")
 
@@ -74,7 +70,6 @@ class TestMoodTaxonomy(unittest.TestCase):
         label, desc = self.taxonomy.get_intensity_info(10)
         self.assertEqual(label, "Peak State")
 
-        # Invalid intensities
         with self.assertRaises(ValueError):
             self.taxonomy.get_intensity_info(0)
         with self.assertRaises(ValueError):
@@ -82,71 +77,67 @@ class TestMoodTaxonomy(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.taxonomy.get_intensity_info(-5)
 
-    def test_build_mood_selection_valid(self):
-        # Joy (1) -> Excited (3) -> Energetic (1) : Intensity 8 -> "J-3-1:8"
-        selection = self.taxonomy.build_mood_selection(
+    def test_build_mood_profile_valid(self):
+        profile = self.taxonomy.build_mood_profile(
             core_index=1,
             branch_index=3,
             specific_index=1,
             intensity=8,
         )
-        self.assertEqual(selection.core_emotion, "Joy")
-        self.assertEqual(selection.branch, "Excited")
-        self.assertEqual(selection.specific_emotion, "Energetic")
-        self.assertEqual(selection.intensity, 8)
-        self.assertEqual(selection.code, "J-3-1:8")
-        self.assertEqual(selection.intensity_label, "Positive / Stable")
+        self.assertEqual(profile.core_emotion, "Joy")
+        self.assertEqual(profile.branch, "Excited")
+        self.assertEqual(profile.specific_emotion, "Energetic")
+        self.assertEqual(profile.intensity, 8)
+        self.assertEqual(profile.code, "J-3-1:8")
+        self.assertEqual(profile.intensity_label, "Positive / Stable")
 
-        # Test dictionary conversion
-        d = selection.to_dict()
+        d = profile.to_dict()
         self.assertEqual(d["code"], "J-3-1:8")
         self.assertEqual(d["core_emotion"], "Joy")
         self.assertEqual(d["intensity"], 8)
         self.assertEqual(d["taxonomy_path"]["branch"], "Excited")
 
     def test_build_from_names_valid(self):
-        selection = self.taxonomy.build_from_names(
+        profile = self.taxonomy.build_from_names(
             core_emotion="Joy",
             branch="Excited",
             specific_emotion="Energetic",
             intensity=8,
         )
-        self.assertEqual(selection.code, "J-3-1:8")
-        self.assertEqual(selection.core_index, 1)
-        self.assertEqual(selection.branch_index, 3)
-        self.assertEqual(selection.specific_index, 1)
+        self.assertEqual(profile.code, "J-3-1:8")
+        self.assertEqual(profile.core_index, 1)
+        self.assertEqual(profile.branch_index, 3)
+        self.assertEqual(profile.specific_index, 1)
 
     def test_parse_mood_code(self):
-        # Valid code parsing
-        selection = self.taxonomy.parse_code("J-3-1:8")
-        self.assertEqual(selection.core_emotion, "Joy")
-        self.assertEqual(selection.branch, "Excited")
-        self.assertEqual(selection.specific_emotion, "Energetic")
-        self.assertEqual(selection.intensity, 8)
-        self.assertEqual(selection.code, "J-3-1:8")
+        profile = self.taxonomy.parse_code("J-3-1:8")
+        self.assertEqual(profile.core_emotion, "Joy")
+        self.assertEqual(profile.branch, "Excited")
+        self.assertEqual(profile.specific_emotion, "Energetic")
+        self.assertEqual(profile.intensity, 8)
+        self.assertEqual(profile.code, "J-3-1:8")
 
-        # Test another core emotion e.g. Sadness (2) -> Sluggish (3) -> Heavy (1) : 4
-        selection_sad = self.taxonomy.parse_code("S-3-1:4")
-        self.assertEqual(selection_sad.core_emotion, "Sadness")
-        self.assertEqual(selection_sad.branch, "Sluggish")
-        self.assertEqual(selection_sad.specific_emotion, "Heavy")
-        self.assertEqual(selection_sad.intensity, 4)
+        profile_sad = self.taxonomy.parse_code("S-3-1:4")
+        self.assertEqual(profile_sad.core_emotion, "Sadness")
+        self.assertEqual(profile_sad.branch, "Sluggish")
+        self.assertEqual(profile_sad.specific_emotion, "Heavy")
+        self.assertEqual(profile_sad.intensity, 4)
 
     def test_parse_invalid_mood_code(self):
         with self.assertRaises(ValueError):
             self.taxonomy.parse_code("InvalidCode")
 
         with self.assertRaises(ValueError):
-            self.taxonomy.parse_code("J-3-1")  # Missing intensity
+            self.taxonomy.parse_code("J-3-1")
 
         with self.assertRaises(ValueError):
-            self.taxonomy.parse_code("Z-1-1:5")  # Unknown core emotion code
+            self.taxonomy.parse_code("Z-1-1:5")
 
         with self.assertRaises(IndexError):
-            self.taxonomy.parse_code("J-9-1:5")  # Out of range branch index
+            self.taxonomy.parse_code("J-9-1:5")
 
         with self.assertRaises(ValueError):
-            self.taxonomy.parse_code("J-1-1:15")  # Out of range intensity
+            self.taxonomy.parse_code("J-1-1:15")
 
 
 if __name__ == "__main__":

@@ -1,30 +1,31 @@
-"""Main CLI entrypoint for Mood-Based Spotify Playlist Generator."""
+"""Main CLI entrypoint for Mood Profile & Prompt Generator."""
 
 from __future__ import annotations
 import argparse
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 
-from src.models import MoodSelection
+from src.models import MoodProfile
 from src.mood_selection import MoodSelectionCLI
+from src.prompt import generate_recommendation_prompt
 from src.taxonomy import MoodTaxonomy
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line argument parser."""
     parser = argparse.ArgumentParser(
-        description="Mood-Based Spotify Playlist Generator — Mood Selection CLI",
+        description="Mood Profile & Prompt Generator — Deterministic Music Recommendation Prompt Builder",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--code",
         type=str,
-        help="Directly parse and validate a mood code (e.g., 'J-3-1:8') without interactive prompts.",
+        help="Directly generate a prompt from a mood code (e.g., 'J-3-1:8') without interactive prompts.",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Output the resulting mood selection as structured JSON.",
+        help="Output the structured mood profile as JSON.",
     )
     parser.add_argument(
         "--dump-taxonomy",
@@ -54,26 +55,35 @@ def main(args: Optional[list[str]] = None) -> int:
                     print(f"      {prefix} {s_idx}. {s_name}")
         return 0
 
-    selection: Optional[MoodSelection] = None
+    profile: Optional[MoodProfile] = None
 
     if parsed_args.code:
         try:
-            selection = taxonomy.parse_code(parsed_args.code)
+            profile = taxonomy.parse_code(parsed_args.code)
+            prompt = generate_recommendation_prompt(profile)
             if not parsed_args.json:
-                print(f"\n[✓] Validated mood code: {parsed_args.code}")
-                print(selection.format_tree())
+                print("\n" + profile.format_profile())
+                print("\n" + "=" * 60)
+                print("              GENERATED RECOMMENDATION PROMPT")
+                print("=" * 60)
+                print(prompt)
+                print("=" * 60)
+                print("\nCopy and paste the prompt above into an external chatbot.\n")
         except Exception as e:
             print(f"Error parsing mood code '{parsed_args.code}': {e}", file=sys.stderr)
             return 1
     else:
         cli = MoodSelectionCLI(taxonomy=taxonomy)
-        selection = cli.run()
+        result = cli.run()
+        if result is None:
+            return 1
+        profile, _ = result
 
-    if selection is None:
+    if profile is None:
         return 1
 
     if parsed_args.json:
-        print(selection.to_json())
+        print(profile.to_json())
 
     return 0
 

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.models import Branch, CoreEmotion, IntensityLevel, MoodSelection
+from src.models import Branch, CoreEmotion, IntensityLevel, MoodProfile
 
 
 DEFAULT_TAXONOMY_PATH = Path(__file__).parent.parent / "context" / "mood-taxonomy.json"
@@ -158,14 +157,14 @@ class MoodTaxonomy:
         """Return the list of configured intensity level ranges and descriptions."""
         return list(self._intensity_levels)
 
-    def build_mood_selection(
+    def build_mood_profile(
         self,
         core_index: int,
         branch_index: int,
         specific_index: int,
         intensity: int,
-    ) -> MoodSelection:
-        """Construct a validated MoodSelection object from 1-based hierarchy indices and intensity."""
+    ) -> MoodProfile:
+        """Construct a validated MoodProfile object from 1-based hierarchy indices and intensity."""
         core = self.get_core_emotion(core_index)
         branch = self.get_branch(core.name, branch_index)
         specific = self.get_specific_emotion(core.name, branch.name, specific_index)
@@ -176,11 +175,11 @@ class MoodTaxonomy:
         label, desc = self.get_intensity_info(intensity)
         code = f"{core.code_letter}-{branch_index}-{specific_index}:{intensity}"
 
-        return MoodSelection(
+        return MoodProfile(
+            intensity=intensity,
             core_emotion=core.name,
             branch=branch.name,
             specific_emotion=specific,
-            intensity=intensity,
             code=code,
             intensity_label=label,
             intensity_description=desc,
@@ -189,14 +188,24 @@ class MoodTaxonomy:
             specific_index=specific_index,
         )
 
+    def build_mood_selection(
+        self,
+        core_index: int,
+        branch_index: int,
+        specific_index: int,
+        intensity: int,
+    ) -> MoodProfile:
+        """Alias for build_mood_profile."""
+        return self.build_mood_profile(core_index, branch_index, specific_index, intensity)
+
     def build_from_names(
         self,
         core_emotion: str,
         branch: str,
         specific_emotion: str,
         intensity: int,
-    ) -> MoodSelection:
-        """Construct a validated MoodSelection from emotion names and intensity."""
+    ) -> MoodProfile:
+        """Construct a validated MoodProfile from emotion names and intensity."""
         if core_emotion not in self._core_emotion_list:
             raise KeyError(f"Core emotion '{core_emotion}' is not valid.")
         core_idx = self._core_emotion_list.index(core_emotion) + 1
@@ -211,11 +220,11 @@ class MoodTaxonomy:
             raise KeyError(f"Specific emotion '{specific_emotion}' is not valid for branch '{branch}'.")
         specific_idx = specifics.index(specific_emotion) + 1
 
-        return self.build_mood_selection(core_idx, branch_idx, specific_idx, intensity)
+        return self.build_mood_profile(core_idx, branch_idx, specific_idx, intensity)
 
-    def parse_code(self, code_str: str) -> MoodSelection:
+    def parse_code(self, code_str: str) -> MoodProfile:
         """
-        Parse a mood code formatted like 'J-3-1:8' or 'Joy-3-1:8' into a MoodSelection object.
+        Parse a mood code formatted like 'J-3-1:8' or 'Joy-3-1:8' into a MoodProfile object.
         """
         raw = code_str.strip()
         if ":" not in raw:
@@ -250,4 +259,4 @@ class MoodTaxonomy:
         except ValueError:
             raise ValueError(f"Branch and specific indices must be integers in code '{code_str}'")
 
-        return self.build_mood_selection(core_idx, branch_idx, specific_idx, intensity)
+        return self.build_mood_profile(core_idx, branch_idx, specific_idx, intensity)

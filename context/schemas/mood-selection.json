@@ -1,21 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "MoodSelection",
+  "title": "MoodProfile",
   "type": "object",
-  "description": "Structured mood context produced deterministically by the user through interactive mood selection.",
+  "description": "Structured mood profile produced deterministically by the user through interactive mood selection.",
   "required": [
-    "code",
     "intensity",
     "core_emotion",
     "branch",
     "specific_emotion",
-    "taxonomy_path"
+    "code"
   ],
   "properties": {
-    "code": {
-      "type": "string",
-      "description": "Canonical mood code encoding core, branch, specific emotion, and intensity (e.g. 'J-3-1:8')."
-    },
     "intensity": {
       "type": "integer",
       "minimum": 1,
@@ -35,6 +30,10 @@
       "type": "string",
       "description": "Specific granular emotion."
     },
+    "code": {
+      "type": "string",
+      "description": "Canonical mood code encoding core, branch, specific emotion, and intensity (e.g. 'J-3-1:8')."
+    },
     "intensity_label": {
       "type": "string",
       "description": "Descriptive label for intensity bracket (e.g. 'Positive / Stable')."
@@ -45,7 +44,6 @@
     },
     "taxonomy_path": {
       "type": "object",
-      "required": ["core_index", "branch_index", "specific_index", "core_emotion", "branch", "specific_emotion"],
       "properties": {
         "core_index": { "type": "integer", "minimum": 1, "maximum": 6 },
         "branch_index": { "type": "integer", "minimum": 1 },

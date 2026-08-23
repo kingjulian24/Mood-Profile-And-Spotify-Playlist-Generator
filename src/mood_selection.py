@@ -1,23 +1,25 @@
-"""Interactive command-line interface for deterministic mood selection."""
+"""Interactive command-line interface for deterministic mood selection and prompt generation."""
 
 from __future__ import annotations
-import sys
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
-from src.models import MoodSelection
+from src.models import MoodProfile
+from src.prompt import PromptTemplate, generate_recommendation_prompt
 from src.taxonomy import MoodTaxonomy
 
 
 class MoodSelectionCLI:
-    """Guides the user through an interactive, step-by-step mood selection process."""
+    """Guides the user through mood selection, produces a mood profile, and renders a recommendation prompt."""
 
     def __init__(
         self,
         taxonomy: Optional[MoodTaxonomy] = None,
+        prompt_template: Optional[PromptTemplate] = None,
         input_func: Callable[[str], str] = input,
         output_func: Callable[[str], None] = print,
     ):
         self.taxonomy = taxonomy or MoodTaxonomy()
+        self.prompt_template = prompt_template or PromptTemplate()
         self._input = input_func
         self._print = output_func
 
@@ -50,13 +52,15 @@ class MoodSelectionCLI:
                 back_msg = " or 'b' to go back" if allow_back else ""
                 self._print(f"  [!] Invalid input. Please enter a valid number ({min_val}–{max_val}){back_msg}.")
 
-    def run(self) -> Optional[MoodSelection]:
-        """Run the interactive mood selection workflow."""
+    def run(self) -> Optional[Tuple[MoodProfile, str]]:
+        """
+        Run the interactive workflow.
+        Returns a tuple of (MoodProfile, generated_prompt) if completed, or None if cancelled.
+        """
         self._print("\n" + "=" * 60)
-        self._print("       MOOD-BASED SPOTIFY PLAYLIST GENERATOR")
-        self._print("             Interactive Mood Selection")
+        self._print("             MOOD PROFILE & PROMPT GENERATOR")
         self._print("=" * 60)
-        self._print("Select your current emotional state using the canonical taxonomy.\n")
+        self._print("Select your current emotional state to generate a recommendation prompt.\n")
 
         core_idx: Optional[int] = None
         branch_idx: Optional[int] = None
@@ -69,8 +73,7 @@ class MoodSelectionCLI:
             # STEP 1: Core Emotion
             # ----------------------------------------------------
             if step == 1:
-                self._print("\n--- Step 1: Core Emotion ---")
-                self._print("Select the core emotion that best describes how you are feeling:")
+                self._print("\nWhat are you feeling?")
                 core_emotions = self.taxonomy.core_emotions
                 for i, core_name in enumerate(core_emotions, 1):
                     core_obj = self.taxonomy.get_core_emotion(core_name)
@@ -85,7 +88,6 @@ class MoodSelectionCLI:
                 if choice is None:
                     return None
                 core_idx = choice
-                # Reset downstream selections if core changed
                 branch_idx = None
                 specific_idx = None
                 step = 2
@@ -97,8 +99,7 @@ class MoodSelectionCLI:
                 core_obj = self.taxonomy.get_core_emotion(core_idx)  # type: ignore
                 branches = self.taxonomy.get_branches(core_obj.name)
 
-                self._print(f"\n--- Step 2: Emotional Branch for '{core_obj.name}' ---")
-                self._print("Select the branch that reflects your state:")
+                self._print(f"\n{core_obj.name}")
                 for i, b_name in enumerate(branches, 1):
                     b_obj = self.taxonomy.get_branch(core_obj.name, b_name)
                     self._print(f"  {i}. {b_name} — {b_obj.description}")
@@ -115,7 +116,6 @@ class MoodSelectionCLI:
                     step = 1
                     continue
                 branch_idx = choice
-                # Reset downstream selection
                 specific_idx = None
                 step = 3
 
@@ -127,8 +127,7 @@ class MoodSelectionCLI:
                 b_obj = self.taxonomy.get_branch(core_obj.name, branch_idx)  # type: ignore
                 specifics = self.taxonomy.get_specific_emotions(core_obj.name, b_obj.name)
 
-                self._print(f"\n--- Step 3: Specific Emotion under '{b_obj.name}' ---")
-                self._print("Select the precise emotion:")
+                self._print(f"\n{b_obj.name}")
                 for i, s_name in enumerate(specifics, 1):
                     self._print(f"  {i}. {s_name}")
 
@@ -150,8 +149,7 @@ class MoodSelectionCLI:
             # STEP 4: Intensity
             # ----------------------------------------------------
             elif step == 4:
-                self._print("\n--- Step 4: Emotional Intensity (Energy / Activation) ---")
-                self._print("Scale of 1–10:")
+                self._print("\nEmotional Intensity (1–10):")
                 for lvl in self.taxonomy.get_intensity_levels():
                     self._print(f"  {lvl.range[0]:2d}–{lvl.range[1]:2d}: {lvl.label} — {lvl.description}")
 
@@ -170,44 +168,38 @@ class MoodSelectionCLI:
                 step = 5
 
             # ----------------------------------------------------
-            # STEP 5: Summary & Confirmation
+            # STEP 5: Mood Profile Summary & Confirmation
             # ----------------------------------------------------
             elif step == 5:
                 assert core_idx is not None and branch_idx is not None
                 assert specific_idx is not None and intensity is not None
 
-                selection = self.taxonomy.build_mood_selection(
+                profile = self.taxonomy.build_mood_profile(
                     core_index=core_idx,
                     branch_index=branch_idx,
                     specific_index=specific_idx,
                     intensity=intensity,
                 )
 
-                self._print("\n" + "=" * 60)
-                self._print("                 SELECTED MOOD SUMMARY")
-                self._print("=" * 60)
-                self._print(f"  Core Emotion:     {selection.core_emotion}")
-                self._print(f"  Branch:           {selection.branch}")
-                self._print(f"  Specific Emotion: {selection.specific_emotion}")
-                self._print(f"  Intensity:        {selection.intensity}/10 ({selection.intensity_label})")
-                self._print(f"  Mood Code:        {selection.code}")
-                self._print("-" * 60)
-                self._print("  Taxonomy Tree:")
-                for line in selection.format_tree().split("\n"):
-                    self._print(f"    {line}")
-                self._print("=" * 60)
+                self._print("\n" + profile.format_profile())
 
                 try:
                     action = self._input(
-                        "\nActions: [C]onfirm | [E]dit a step | [R]estart | [Q]uit: "
+                        "\nActions: [C]onfirm & Generate Prompt | [E]dit a step | [R]estart | [Q]uit: "
                     ).strip().lower()
                 except (EOFError, KeyboardInterrupt):
                     self._print("\nOperation cancelled.")
                     return None
 
                 if action in ("c", "confirm", "yes", "y", ""):
-                    self._print(f"\n[✓] Mood confirmed: {selection.code} ({selection.specific_emotion} at intensity {selection.intensity})")
-                    return selection
+                    prompt = generate_recommendation_prompt(profile, template=self.prompt_template)
+                    self._print("\n" + "=" * 60)
+                    self._print("              GENERATED RECOMMENDATION PROMPT")
+                    self._print("=" * 60)
+                    self._print(prompt)
+                    self._print("=" * 60)
+                    self._print("\nCopy and paste the prompt above into an external chatbot.\n")
+                    return profile, prompt
                 elif action in ("r", "restart"):
                     self._print("\n[i] Restarting selection from Step 1...")
                     step = 1
@@ -235,7 +227,7 @@ class MoodSelectionCLI:
 
 def select_mood_interactive(
     taxonomy: Optional[MoodTaxonomy] = None,
-) -> Optional[MoodSelection]:
+) -> Optional[Tuple[MoodProfile, str]]:
     """Convenience function to run the interactive mood selection CLI."""
     cli = MoodSelectionCLI(taxonomy=taxonomy)
     return cli.run()
