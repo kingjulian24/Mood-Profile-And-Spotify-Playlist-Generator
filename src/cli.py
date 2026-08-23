@@ -47,6 +47,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the full mood taxonomy and intensity scales.",
     )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start the HTTP API backend server for the React GUI.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5000,
+        help="Port number for the HTTP API backend server.",
+    )
     return parser
 
 
@@ -78,6 +89,9 @@ def main(args: Optional[list[str]] = None) -> int:
                 for s_idx, s_name in enumerate(branch.specific_emotions, 1):
                     prefix = "└──" if s_idx == len(branch.specific_emotions) else "├──"
                     print(f"      {prefix} {s_idx}. {s_name}")
+    if parsed_args.serve:
+        from src.server import run_server
+        run_server(port=parsed_args.port)
         return 0
 
     profile: Optional[MoodProfile] = None

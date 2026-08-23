@@ -7,7 +7,7 @@ Welcome to the **Mood Profile & Spotify Playlist Generator** project. This docum
 ## 1. Project Purpose & Scope
 
 The application:
-1. **Determines a structured mood profile** through an interactive deterministic CLI.
+1. **Determines a structured mood profile** through either a React Graphical User Interface or an interactive deterministic CLI.
 2. **Generates a machine-readable prompt** (`json`, `csv`, or `yaml`) submitted to an external chatbot for song recommendations.
 3. **Ingests and parses the chatbot's song recommendations** (`title` and `artist`).
 4. **Resolves songs against the Spotify Web API** and creates a Spotify playlist populated with resolved tracks.
@@ -16,6 +16,7 @@ The application itself:
 * Does **not** execute LLMs or generate song recommendations directly (the user uses an external chatbot for song reasoning).
 * Performs all Spotify operations (authentication, catalog searching, track resolution, playlist CRUD) **deterministically**.
 * Handles partial resolution gracefully and logs unresolved songs.
+* Features a clean architectural boundary between the React frontend (`frontend/`) and the Python domain backend (`src/`).
 
 ---
 
@@ -24,7 +25,7 @@ The application itself:
 This project serves as an implementation for **Context System Design (v0.1)**:
 
 1. **The User is the Authority on Their Emotions:**
-   The user explicitly selects their emotional state through an interactive, deterministic taxonomy traversal (Core Emotion → Branch → Specific Emotion → Intensity 1–10).
+   The user explicitly selects their emotional state through a deterministic taxonomy traversal (Core Emotion → Branch → Specific Emotion → Intensity 1–10).
 
 2. **Deterministic Context Modeling:**
    The application maps the user's choices into a structured `MoodProfile` and canonical code (e.g. `J-3-1:8`).
@@ -35,17 +36,20 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 4. **Spotify is the Authority on Catalog and Tracks:**
    Songs returned by external chatbots are treated as unverified candidates until resolved deterministically against the Spotify Web API.
 
-5. **No Premature Infrastructure:**
-   No vector databases, external AI runtimes, or unnecessary heavy frameworks.
+5. **Zero Logic Duplication across Interfaces:**
+   Both the React GUI and the CLI rely on the same Python backend domain models, taxonomy, and Spotify services. The React frontend communicates via standard HTTP REST endpoints served by `src/server.py`.
+
+6. **Security & Credential Isolation:**
+   Spotify client IDs, client secrets, and access tokens are strictly managed by the Python backend via environment variables and never exposed to the frontend browser application.
 
 ---
 
 ## 3. Architecture & Data Flow
 
 ```text
-User & Configuration (config.json)
+React GUI (frontend/) OR Interactive CLI (src/mood_selection.py)
  ↓
-Interactive CLI (src/mood_selection.py)
+Python Application Interface / REST API (src/server.py)
  ↓
 Taxonomy Traversal (src/taxonomy.py & context/mood-taxonomy.json)
  ↓
