@@ -1,12 +1,15 @@
 """Unit tests for Spotify integration, environment variable credentials, track resolution, and playlist creation."""
 
+import base64
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
 from src.models import MoodProfile, ResolvedTrack, SongRecommendation
-from src.spotify import SpotifyAuthError, SpotifyClient, SpotifyError
+from src.spotify import DEFAULT_REDIRECT_URI, SpotifyAuthError, SpotifyClient, SpotifyError
 
 
 class MockSpotifyHTTPRequester:
@@ -45,6 +48,7 @@ class MockSpotifyHTTPRequester:
         }
         self.created_playlists: List[Dict[str, Any]] = []
         self.added_tracks: List[Dict[str, Any]] = []
+        self.last_token_request: Optional[Dict[str, Any]] = None
 
     def __call__(
         self,
@@ -53,6 +57,14 @@ class MockSpotifyHTTPRequester:
         headers: Optional[Dict[str, str]] = None,
         data: Optional[Any] = None,
     ) -> Dict[str, Any]:
+        if "api/token" in url:
+            self.last_token_request = {"headers": headers, "data": data}
+            return {
+                "access_token": "mock_generated_access_token_789",
+                "refresh_token": "mock_refresh_token_789",
+                "expires_in": 3600,
+            }
+
         if "/search" in url:
             for key, val in self.search_db.items():
                 if key in url.lower():
@@ -81,12 +93,15 @@ class MockSpotifyHTTPRequester:
 
 
 class TestSpotifyIntegration(unittest.TestCase):
-    """Test suite for Spotify track resolution and playlist creation."""
+    """Test suite for Spotify track resolution, environment credentials, and playlist creation."""
 
     def setUp(self):
         self.mock_http = MockSpotifyHTTPRequester()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_cache = Path(self.temp_dir.name) / "test_cache.json"
         self.client = SpotifyClient(
             access_token="test_valid_access_token",
+            token_cache_path=self.temp_cache,
             http_requester=self.mock_http,
         )
         self.profile = MoodProfile(
@@ -98,13 +113,16 @@ class TestSpotifyIntegration(unittest.TestCase):
             intensity_label="Crisis / Exhausted",
         )
 
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
     def test_missing_credentials_raises_auth_error(self):
         with patch.dict(os.environ, {}, clear=True):
             empty_client = SpotifyClient(
                 client_id="",
                 client_secret="",
                 access_token="",
-                token_cache_path="nonexistent_cache.json",
+                token_cache_path=self.temp_cache,
             )
             with self.assertRaises(SpotifyAuthError) as ctx:
                 empty_client.authenticate()
@@ -118,11 +136,53 @@ class TestSpotifyIntegration(unittest.TestCase):
             "SPOTIFY_ACCESS_TOKEN": "env_test_token",
         }
         with patch.dict(os.environ, env_vars, clear=True):
-            client = SpotifyClient(token_cache_path="nonexistent_cache.json")
+            client = SpotifyClient(token_cache_path=self.temp_cache)
             self.assertEqual(client.client_id, "env_test_client_id")
             self.assertEqual(client.client_secret, "env_test_client_secret")
             self.assertEqual(client.redirect_uri, "http://localhost:9999/callback")
             self.assertEqual(client.access_token, "env_test_token")
+
+    def test_redirect_uri_defaults_when_env_not_set(self):
+        env_vars = {
+            "SPOTIFY_CLIENT_ID": "env_test_client_id",
+            "SPOTIFY_CLIENT_SECRET": "env_test_client_secret",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            client = SpotifyClient(token_cache_path=self.temp_cache)
+            self.assertEqual(client.redirect_uri, DEFAULT_REDIRECT_URI)
+
+    def test_access_token_env_var_bypasses_oauth_exchange(self):
+        env_vars = {"SPOTIFY_ACCESS_TOKEN": "direct_env_token_abc"}
+        with patch.dict(os.environ, env_vars, clear=True):
+            client = SpotifyClient(
+                token_cache_path=self.temp_cache,
+                http_requester=self.mock_http,
+            )
+            client.authenticate()
+            self.assertEqual(client.access_token, "direct_env_token_abc")
+            self.assertIsNone(self.mock_http.last_token_request)
+
+    def test_oauth_token_exchange_uses_env_credentials(self):
+        env_vars = {
+            "SPOTIFY_CLIENT_ID": "test_id_123",
+            "SPOTIFY_CLIENT_SECRET": "test_secret_456",
+            "SPOTIFY_REDIRECT_URI": "http://127.0.0.1:8888/callback",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            client = SpotifyClient(
+                token_cache_path=self.temp_cache,
+                http_requester=self.mock_http,
+                input_func=lambda prompt: "http://127.0.0.1:8888/callback?code=mock_code_xyz",
+                output_func=lambda msg: None,
+            )
+            client.authenticate()
+            self.assertEqual(client.access_token, "mock_generated_access_token_789")
+            self.assertIsNotNone(self.mock_http.last_token_request)
+
+            # Verify Basic auth header in token request matches client_id:client_secret
+            expected_basic = base64.b64encode("test_id_123:test_secret_456".encode()).decode()
+            auth_header = self.mock_http.last_token_request["headers"].get("Authorization")
+            self.assertEqual(auth_header, f"Basic {expected_basic}")
 
     def test_search_track_found(self):
         track = self.client.search_track("September", "Earth, Wind & Fire")
