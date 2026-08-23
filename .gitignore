@@ -2,6 +2,19 @@
 .DS_Store
 Thumbs.db
 
+# Secrets & Environment Variables
+.env
+.env.*
+!.env.example
+set-spotify-env.sh
+*.env.sh
+!set-spotify-env.example.sh
+
+# Spotify Token & Auth Caches
+.cache-spotify*
+.spotify_token*
+.cache*
+
 # Python
 __pycache__/
 *.py[cod]

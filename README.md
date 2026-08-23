@@ -60,27 +60,61 @@ Managed in [`config.json`](config.json) at the root of the project:
 * `song_count`: Number of songs requested from the chatbot (default: `10`).
 * `output_format`: Machine-readable format requested: `"json"`, `"csv"`, or `"yaml"`.
 
-### Spotify Authentication Setup
-To create Spotify playlists, set the following environment variables (or in a `.env` file):
+---
 
-```bash
-export SPOTIFY_CLIENT_ID="your_spotify_client_id"
-export SPOTIFY_CLIENT_SECRET="your_spotify_client_secret"
-export SPOTIFY_REDIRECT_URI="http://127.0.0.1:8888/callback" # (Default)
-```
+## Spotify Credentials & Environment Setup
 
-Alternatively, you can provide an existing OAuth access token directly:
-```bash
-export SPOTIFY_ACCESS_TOKEN="your_oauth_access_token"
-```
+Spotify credentials are sensitive secrets and are read strictly from **environment variables**. They are never hardcoded or stored in application configuration files.
+
+### Required Environment Variables
+
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `SPOTIFY_CLIENT_ID` | Yes | Client ID from Spotify Developer Dashboard. |
+| `SPOTIFY_CLIENT_SECRET` | Yes | Client Secret from Spotify Developer Dashboard. |
+| `SPOTIFY_REDIRECT_URI` | Optional | Redirect URI (default: `http://127.0.0.1:8888/callback`). |
+| `SPOTIFY_ACCESS_TOKEN` | Optional | Direct OAuth access token override (bypasses auth flow). |
+
+### How to Obtain Spotify Credentials
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and log in.
+2. Click **Create an App**.
+3. Set **App Name** to `Mood Playlist Generator` (or any name).
+4. Add `http://127.0.0.1:8888/callback` under **Redirect URIs** in your app settings.
+5. Copy your **Client ID** and **Client Secret**.
+
+### Configuring the Local Environment
+
+A safe template [`set-spotify-env.example.sh`](set-spotify-env.example.sh) is provided in the repository.
+
+1. Copy the example template to create your local script:
+   ```bash
+   cp set-spotify-env.example.sh set-spotify-env.sh
+   ```
+
+2. Edit `set-spotify-env.sh` and fill in your Client ID and Client Secret:
+   ```bash
+   export SPOTIFY_CLIENT_ID="your_spotify_client_id_here"
+   export SPOTIFY_CLIENT_SECRET="your_spotify_client_secret_here"
+   export SPOTIFY_REDIRECT_URI="http://127.0.0.1:8888/callback"
+   ```
+
+3. **Source** the script in your terminal before running the application:
+   ```bash
+   source ./set-spotify-env.sh
+   ```
+
+> **Security Note:** `set-spotify-env.sh` is excluded by [`.gitignore`](.gitignore) and will never be committed to Git.
 
 ---
 
 ## Usage
 
 ### 1. Interactive CLI Mode (Full End-to-End Workflow)
-Run the interactive wizard:
 ```bash
+# 1. Source your environment variables
+source ./set-spotify-env.sh
+
+# 2. Run the application
 python3 main.py
 ```
 
@@ -127,6 +161,8 @@ python3 -m unittest discover -s tests
 ├── AGENTS.md                  # Operating guidelines for AI coding agents
 ├── README.md                  # Project overview and usage documentation
 ├── config.json                # User application configuration (song_count, output_format)
+├── set-spotify-env.example.sh # Safe template for Spotify API credentials
+├── set-spotify-env.sh         # Local credentials script (ignored by Git)
 ├── main.py                    # Root entrypoint
 ├── src/                       # Application source code
 │   ├── __init__.py
@@ -160,5 +196,6 @@ python3 -m unittest discover -s tests
     ├── Task-003—Simplify-Application-to-Mood-Profile-Prompt-Generator.md
     ├── Task-004-Add-Application-Configuration.md
     ├── Task-005-Make-Recommendation-Output-Format-Configurable.md
-    └── Task-006-Import-Song-List-and-Create-Spotify-Playlist.md
+    ├── Task-006-Import-Song-List-and-Create-Spotify-Playlist.md
+    └── Task-007-Add-Credentials-to-Environment.md
 ```

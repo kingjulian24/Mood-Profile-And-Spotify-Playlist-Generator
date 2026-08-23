@@ -1,7 +1,10 @@
-"""Unit tests for Spotify integration, track resolution, and playlist creation."""
+"""Unit tests for Spotify integration, environment variable credentials, track resolution, and playlist creation."""
 
+import os
 import unittest
 from typing import Any, Dict, List, Optional
+from unittest.mock import patch
+
 from src.models import MoodProfile, ResolvedTrack, SongRecommendation
 from src.spotify import SpotifyAuthError, SpotifyClient, SpotifyError
 
@@ -96,15 +99,30 @@ class TestSpotifyIntegration(unittest.TestCase):
         )
 
     def test_missing_credentials_raises_auth_error(self):
-        empty_client = SpotifyClient(
-            client_id="",
-            client_secret="",
-            access_token="",
-            token_cache_path="nonexistent_cache.json",
-        )
-        with self.assertRaises(SpotifyAuthError) as ctx:
-            empty_client.authenticate()
-        self.assertIn("Spotify credentials not found", str(ctx.exception))
+        with patch.dict(os.environ, {}, clear=True):
+            empty_client = SpotifyClient(
+                client_id="",
+                client_secret="",
+                access_token="",
+                token_cache_path="nonexistent_cache.json",
+            )
+            with self.assertRaises(SpotifyAuthError) as ctx:
+                empty_client.authenticate()
+            self.assertIn("Spotify credentials not found", str(ctx.exception))
+
+    def test_credentials_read_from_environment_variables(self):
+        env_vars = {
+            "SPOTIFY_CLIENT_ID": "env_test_client_id",
+            "SPOTIFY_CLIENT_SECRET": "env_test_client_secret",
+            "SPOTIFY_REDIRECT_URI": "http://localhost:9999/callback",
+            "SPOTIFY_ACCESS_TOKEN": "env_test_token",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            client = SpotifyClient(token_cache_path="nonexistent_cache.json")
+            self.assertEqual(client.client_id, "env_test_client_id")
+            self.assertEqual(client.client_secret, "env_test_client_secret")
+            self.assertEqual(client.redirect_uri, "http://localhost:9999/callback")
+            self.assertEqual(client.access_token, "env_test_token")
 
     def test_search_track_found(self):
         track = self.client.search_track("September", "Earth, Wind & Fire")
