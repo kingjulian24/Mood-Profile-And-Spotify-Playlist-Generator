@@ -15,25 +15,49 @@ class TestAppConfig(unittest.TestCase):
         config = load_config()
         self.assertIsInstance(config, AppConfig)
         self.assertEqual(config.song_count, 10)
+        self.assertEqual(config.output_format, "json")
 
     def test_load_custom_config_file(self):
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as f:
-            json.dump({"song_count": 25}, f)
+            json.dump({"song_count": 25, "output_format": "csv"}, f)
             temp_path = f.name
 
         try:
             config = load_config(temp_path)
             self.assertEqual(config.song_count, 25)
+            self.assertEqual(config.output_format, "csv")
         finally:
             Path(temp_path).unlink(missing_ok=True)
 
     def test_validate_valid_config(self):
-        config = validate_config({"song_count": 15})
+        config = validate_config({"song_count": 15, "output_format": "yaml"})
         self.assertEqual(config.song_count, 15)
+        self.assertEqual(config.output_format, "yaml")
+
+    def test_validate_output_format_case_insensitivity(self):
+        for fmt in ["JSON", "Csv", "YAML"]:
+            config = validate_config({"song_count": 10, "output_format": fmt})
+            self.assertEqual(config.output_format, fmt.lower())
+
+    def test_validate_default_output_format_when_omitted(self):
+        config = validate_config({"song_count": 10})
+        self.assertEqual(config.output_format, "json")
+
+    def test_validate_invalid_output_format(self):
+        for invalid_fmt in ["xml", "text", "markdown", "", "tsv"]:
+            with self.assertRaises(ConfigError) as ctx:
+                validate_config({"song_count": 10, "output_format": invalid_fmt})
+            self.assertIn("Unsupported output_format", str(ctx.exception))
+
+    def test_validate_non_string_output_format(self):
+        for invalid_fmt in [123, True, None, ["json"]]:
+            with self.assertRaises(ConfigError) as ctx:
+                validate_config({"song_count": 10, "output_format": invalid_fmt})
+            self.assertIn("must be a string", str(ctx.exception))
 
     def test_validate_missing_song_count(self):
         with self.assertRaises(ConfigError) as ctx:
-            validate_config({})
+            validate_config({"output_format": "json"})
         self.assertIn("Missing required configuration field: 'song_count'", str(ctx.exception))
 
     def test_validate_non_integer_song_count(self):

@@ -4,10 +4,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+SUPPORTED_OUTPUT_FORMATS: Tuple[str, ...] = ("json", "csv", "yaml")
 
 
 class ConfigError(ValueError):
@@ -19,11 +20,13 @@ class ConfigError(ValueError):
 class AppConfig:
     """Represents validated application configuration settings."""
     song_count: int
+    output_format: str = "json"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary format."""
         return {
             "song_count": self.song_count,
+            "output_format": self.output_format,
         }
 
 
@@ -43,7 +46,17 @@ def validate_config(raw_data: Any) -> AppConfig:
     if song_count <= 0:
         raise ConfigError(f"Field 'song_count' must be a positive integer (> 0), got {song_count}.")
 
-    return AppConfig(song_count=song_count)
+    output_format_raw = raw_data.get("output_format", "json")
+    if not isinstance(output_format_raw, str):
+        raise ConfigError(f"Field 'output_format' must be a string, got {type(output_format_raw).__name__} ({output_format_raw!r}).")
+
+    output_format = output_format_raw.strip().lower()
+    if output_format not in SUPPORTED_OUTPUT_FORMATS:
+        raise ConfigError(
+            f"Unsupported output_format '{output_format_raw}'. Supported formats: {', '.join(SUPPORTED_OUTPUT_FORMATS)}."
+        )
+
+    return AppConfig(song_count=song_count, output_format=output_format)
 
 
 def load_config(config_path: Optional[Path | str] = None) -> AppConfig:

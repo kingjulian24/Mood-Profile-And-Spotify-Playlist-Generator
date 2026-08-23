@@ -6,14 +6,13 @@ Welcome to the **Mood Profile & Prompt Generator** project. This document define
 
 ## 1. Project Purpose & Scope
 
-The application **determines a structured mood profile through an interactive CLI and generates a prompt that can be submitted to an external chatbot for song recommendations.**
+The application **determines a structured mood profile through an interactive CLI and generates a machine-readable prompt that can be submitted to an external chatbot for song recommendations.**
 
 The application itself:
 * Does **not** execute LLMs or make external AI API calls.
-* Does **not** integrate with the Spotify API, authenticate users, or create playlists.
+* Does **not** integrate with the Spotify API, authenticate users, or create playlists (these belong to future phases).
+* Does **not** yet parse or process the chatbot's response.
 * Is deterministic, lightweight, and focused on **Context Generation → Context Modeling → Static Prompt Assembly**.
-
-Song recommendations are handled externally by the chatbot that the user provides the generated prompt to.
 
 ---
 
@@ -27,11 +26,14 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 2. **Deterministic Context Modeling:**
    The application maps the user's choices into a structured `MoodProfile` and canonical code (e.g. `J-3-1:8`).
 
-3. **Separation of Configuration, Template, and Interaction:**
-   - User settings (such as `song_count`) are maintained externally in [`config.json`](config.json) and loaded via [`src/config.py`](src/config.py).
-   - The static prompt template ([`src/prompt.py`](src/prompt.py)) is decoupled from the CLI interaction logic ([`src/mood_selection.py`](src/mood_selection.py)).
+3. **Machine-Readable Output Contracts:**
+   Prompts instruct the external chatbot to return structured song data (`json`, `csv`, or `yaml`) with required `title` and `artist` fields, without conversational prose.
 
-4. **No Premature Infrastructure:**
+4. **Separation of Configuration, Template, and Interaction:**
+   - User settings (`song_count`, `output_format`) are maintained externally in [`config.json`](config.json) and loaded via [`src/config.py`](src/config.py).
+   - The prompt templates ([`src/prompt.py`](src/prompt.py)) are decoupled from the CLI interaction logic ([`src/mood_selection.py`](src/mood_selection.py)).
+
+5. **No Premature Infrastructure:**
    No vector databases, external APIs, LLM runtimes, or complex frameworks.
 
 ---
@@ -47,7 +49,7 @@ Taxonomy Traversal (src/taxonomy.py & context/mood-taxonomy.json)
  ↓
 Structured Mood Profile (src/models.py: MoodProfile)
  ↓
-Static Prompt Template (src/prompt.py: PromptTemplate & src/config.py)
+Machine-Readable Prompt Template (src/prompt.py: PromptTemplate & src/config.py)
  ↓
 Final Recommendation Prompt (displayed for user to copy)
 ```
@@ -75,4 +77,4 @@ Domain context files are located in `context/`:
 2. **Single Source of Truth:**
    Always use [`context/mood-taxonomy.json`](context/mood-taxonomy.json) for taxonomy structure and [`config.json`](config.json) for user settings.
 3. **Unit Testing:**
-   Maintain test coverage across configuration loading, taxonomy traversal, invalid input handling, profile formatting, and prompt rendering.
+   Maintain test coverage across configuration loading, output format validation, taxonomy traversal, invalid input handling, profile formatting, and prompt rendering.

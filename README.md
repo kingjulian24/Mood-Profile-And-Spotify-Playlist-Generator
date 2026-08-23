@@ -10,11 +10,11 @@ The **Mood Profile & Prompt Generator** is a lightweight, deterministic command-
 
 1. Guides the user through the canonical mood taxonomy to capture their emotional state.
 2. Constructs a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
-3. Formats the profile into a **static song-recommendation prompt** using user-configurable application settings.
-4. Displays the final prompt for the user to copy into an external chatbot for music recommendations.
+3. Formats the profile into a **machine-readable song-recommendation prompt** based on configurable application settings.
+4. Displays the completed prompt for the user to copy into an external chatbot.
 
 > **Note on Implementation Scope:**
-> The application is focused on **Context Generation → Context Modeling → Static Prompt Assembly**. The application contains **no internal LLM runtime and no Spotify API integration**.
+> The application currently focuses on **Context Generation → Context Modeling → Prompt Assembly**. It requests structured, machine-readable output (`json`, `csv`, or `yaml`) from an external chatbot so that future stages can parse and consume the song list programmatically. The application itself does not yet parse chatbot responses, call LLMs, or integrate with Spotify.
 
 ---
 
@@ -27,10 +27,12 @@ Context Modeling        Application structures choices into a Mood Profile and c
         ↓
 Context Validation      User reviews and confirms the mood profile
         ↓
-Prompt Assembly         Static prompt template is populated with the structured mood profile
-                        and configured song count (from config.json)
+Prompt Assembly         Static prompt template is populated with the structured mood profile,
+                        configured song count, and requested output format (from config.json)
         ↓
 Final Output            Completed prompt is displayed for copying into an external chatbot
+        ↓
+[Future Tasks]          Importing machine-readable song list & playlist generation
 ```
 
 ---
@@ -39,8 +41,8 @@ Final Output            Completed prompt is displayed for copying into an extern
 
 * **Authoritative Human-in-the-Loop Selection:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
 * **Deterministic & Standalone:** Runs locally with zero external network or API dependencies.
-* **Dedicated Configuration:** User settings like `song_count` are stored in [`config.json`](config.json).
-* **Modular Prompt Templates:** Prompt templates are cleanly decoupled from CLI traversal logic.
+* **Machine-Readable Output Contracts:** Prompts instruct chatbots to return structured data in `json`, `csv`, or `yaml` with required `title` and `artist` fields and no conversational filler.
+* **Dedicated Configuration:** Settings like `song_count` and `output_format` are stored in [`config.json`](config.json).
 * **Canonical Taxonomy:** Uses [`context/mood-taxonomy.json`](context/mood-taxonomy.json) as the single source of truth.
 
 ---
@@ -51,20 +53,23 @@ Application settings are managed in [`config.json`](config.json) at the root of 
 
 ```json
 {
-  "song_count": 10
+  "song_count": 10,
+  "output_format": "json"
 }
 ```
 
-### Changing the Number of Songs
-To change the number of songs requested in the generated prompt (e.g. to 20), update the `song_count` value in [`config.json`](config.json):
+### Supported Settings
 
-```json
-{
-  "song_count": 20
-}
-```
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `song_count` | `int` | `10` | Positive integer specifying how many song recommendations to request. |
+| `output_format` | `string` | `"json"` | Output format requested from the chatbot: `"json"`, `"csv"`, or `"yaml"`. |
 
-The generated prompt will immediately reflect the new setting (e.g., `"Generate 20 songs based on the following mood profile."`) without requiring any code modifications.
+### Output Format Contracts
+
+* **`json`**: Requests a JSON object with a `"songs"` array of objects having `"title"` and `"artist"` keys.
+* **`csv`**: Requests CSV data with a `title,artist` header row.
+* **`yaml`**: Requests YAML data with a `"songs"` list of items containing `title` and `artist`.
 
 ---
 
@@ -130,21 +135,21 @@ python3 -m unittest discover -s tests
 .
 ├── AGENTS.md                  # Operating guidelines for AI coding agents
 ├── README.md                  # Project overview and usage documentation
-├── config.json                # User application configuration (e.g. song_count)
+├── config.json                # User application configuration (song_count, output_format)
 ├── main.py                    # Root entrypoint
 ├── src/                       # Application source code
 │   ├── __init__.py
 │   ├── config.py              # Configuration loader and validator
 │   ├── models.py              # MoodProfile and taxonomy data models
 │   ├── taxonomy.py            # Taxonomy traversal, validation, and code parsing
-│   ├── prompt.py              # Static prompt template representation and rendering
+│   ├── prompt.py              # Machine-readable prompt templates and rendering
 │   ├── mood_selection.py      # Interactive CLI wizard
 │   └── cli.py                 # CLI argument parsing
 ├── tests/                     # Automated unit test suite
 │   ├── __init__.py
 │   ├── test_config.py         # Configuration loading and validation tests
 │   ├── test_taxonomy.py       # Taxonomy and code parsing tests
-│   ├── test_prompt.py         # Prompt template rendering tests
+│   ├── test_prompt.py         # Prompt template rendering tests (JSON, CSV, YAML)
 │   └── test_mood_selection.py # Interactive CLI flow tests
 ├── context/                   # Canonical domain context and schemas
 │   ├── mood-taxonomy.json     # Canonical mood taxonomy and intensity scales
@@ -158,5 +163,6 @@ python3 -m unittest discover -s tests
     ├── Task-001-Initialize-Project-Documentation.md
     ├── Task-002—Implement-Interactive-Mood-Selection-CLI.md
     ├── Task-003—Simplify-Application-to-Mood-Profile-Prompt-Generator.md
-    └── Task-004-Add-Application-Configuration.md
+    ├── Task-004-Add-Application-Configuration.md
+    └── Task-005-Make-Recommendation-Output-Format-Configurable.md
 ```
