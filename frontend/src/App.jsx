@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from './api/client';
 import { MoodSelection } from './components/MoodSelection';
 import { MoodProfileView } from './components/MoodProfileView';
+import { PromptView } from './components/PromptView';
 
 export function App() {
   const [backendStatus, setBackendStatus] = useState({
@@ -24,6 +25,11 @@ export function App() {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [profileError, setProfileError] = useState(null);
+
+  // Generated Prompt State
+  const [promptData, setPromptData] = useState(null);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState(null);
 
   useEffect(() => {
     async function initApp() {
@@ -61,6 +67,8 @@ export function App() {
     setSelectedSpecific('');
     setProfile(null);
     setProfileError(null);
+    setPromptData(null);
+    setPromptError(null);
   };
 
   const handleSelectBranch = (branchName) => {
@@ -68,18 +76,37 @@ export function App() {
     setSelectedSpecific('');
     setProfile(null);
     setProfileError(null);
+    setPromptData(null);
+    setPromptError(null);
   };
 
   const handleSelectSpecific = (specificName) => {
     setSelectedSpecific(specificName);
     setProfile(null);
     setProfileError(null);
+    setPromptData(null);
+    setPromptError(null);
   };
 
   const handleSelectIntensity = (intensityVal) => {
     setIntensity(intensityVal);
     setProfile(null);
     setProfileError(null);
+    setPromptData(null);
+    setPromptError(null);
+  };
+
+  const fetchPrompt = async (targetProfile) => {
+    setLoadingPrompt(true);
+    setPromptError(null);
+    try {
+      const pData = await api.generatePrompt({ profile: targetProfile });
+      setPromptData(pData);
+    } catch (err) {
+      setPromptError(err.message || 'Failed to generate recommendation prompt from backend.');
+    } finally {
+      setLoadingPrompt(false);
+    }
   };
 
   const handleGenerateProfile = async () => {
@@ -87,6 +114,7 @@ export function App() {
 
     setLoadingProfile(true);
     setProfileError(null);
+    setPromptData(null);
 
     try {
       const generatedProfile = await api.generateProfile({
@@ -96,6 +124,8 @@ export function App() {
         intensity: intensity,
       });
       setProfile(generatedProfile);
+      // Immediately request prompt generation from backend using authoritative config and profile
+      await fetchPrompt(generatedProfile);
     } catch (err) {
       setProfileError(err.message || 'Failed to generate mood profile.');
     } finally {
@@ -197,13 +227,18 @@ export function App() {
             </div>
             {config && (
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {config.song_count} songs ({config.output_format.toUpperCase()})
+                {config.song_count} songs ({config.output_format?.toUpperCase()})
               </span>
             )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Copyable prompt requesting machine-readable song recommendations from an external chatbot.
-          </p>
+
+          <PromptView
+            promptData={promptData}
+            loading={loadingPrompt}
+            error={promptError}
+            onRetry={() => profile && fetchPrompt(profile)}
+            config={config}
+          />
         </section>
 
         {/* Step 4: Song Recommendations */}
