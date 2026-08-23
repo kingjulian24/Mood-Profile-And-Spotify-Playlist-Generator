@@ -3,8 +3,9 @@
 from __future__ import annotations
 import argparse
 import sys
-from typing import Optional, Tuple
+from typing import Optional
 
+from src.config import ConfigError, load_config
 from src.models import MoodProfile
 from src.mood_selection import MoodSelectionCLI
 from src.prompt import generate_recommendation_prompt
@@ -21,6 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--code",
         type=str,
         help="Directly generate a prompt from a mood code (e.g., 'J-3-1:8') without interactive prompts.",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to custom configuration file (defaults to config.json).",
     )
     parser.add_argument(
         "--json",
@@ -40,7 +47,17 @@ def main(args: Optional[list[str]] = None) -> int:
     parser = build_parser()
     parsed_args = parser.parse_args(args)
 
-    taxonomy = MoodTaxonomy()
+    try:
+        config = load_config(parsed_args.config)
+    except ConfigError as e:
+        print(f"Configuration error: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        taxonomy = MoodTaxonomy()
+    except Exception as e:
+        print(f"Taxonomy error: {e}", file=sys.stderr)
+        return 1
 
     if parsed_args.dump_taxonomy:
         print("\n--- Canonical Mood Taxonomy & Intensity Scales ---")
@@ -60,7 +77,7 @@ def main(args: Optional[list[str]] = None) -> int:
     if parsed_args.code:
         try:
             profile = taxonomy.parse_code(parsed_args.code)
-            prompt = generate_recommendation_prompt(profile)
+            prompt = generate_recommendation_prompt(profile, config=config)
             if not parsed_args.json:
                 print("\n" + profile.format_profile())
                 print("\n" + "=" * 60)
@@ -73,7 +90,7 @@ def main(args: Optional[list[str]] = None) -> int:
             print(f"Error parsing mood code '{parsed_args.code}': {e}", file=sys.stderr)
             return 1
     else:
-        cli = MoodSelectionCLI(taxonomy=taxonomy)
+        cli = MoodSelectionCLI(taxonomy=taxonomy, config=config)
         result = cli.run()
         if result is None:
             return 1

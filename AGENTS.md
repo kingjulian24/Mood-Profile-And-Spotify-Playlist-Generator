@@ -27,8 +27,9 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 2. **Deterministic Context Modeling:**
    The application maps the user's choices into a structured `MoodProfile` and canonical code (e.g. `J-3-1:8`).
 
-3. **Separation of Template from Interaction:**
-   The static prompt template (`src/prompt.py`) is decoupled from the CLI interaction logic (`src/mood_selection.py`).
+3. **Separation of Configuration, Template, and Interaction:**
+   - User settings (such as `song_count`) are maintained externally in [`config.json`](config.json) and loaded via [`src/config.py`](src/config.py).
+   - The static prompt template ([`src/prompt.py`](src/prompt.py)) is decoupled from the CLI interaction logic ([`src/mood_selection.py`](src/mood_selection.py)).
 
 4. **No Premature Infrastructure:**
    No vector databases, external APIs, LLM runtimes, or complex frameworks.
@@ -38,7 +39,7 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 ## 3. Architecture & Data Flow
 
 ```text
-User
+User & Configuration (config.json)
  ↓
 Interactive CLI (src/mood_selection.py)
  ↓
@@ -46,7 +47,7 @@ Taxonomy Traversal (src/taxonomy.py & context/mood-taxonomy.json)
  ↓
 Structured Mood Profile (src/models.py: MoodProfile)
  ↓
-Static Prompt Template (src/prompt.py: PromptTemplate)
+Static Prompt Template (src/prompt.py: PromptTemplate & src/config.py)
  ↓
 Final Recommendation Prompt (displayed for user to copy)
 ```
@@ -63,6 +64,7 @@ Domain context files are located in `context/`:
   * **Intensity Scale (1–10):** Emotional activation/energy (1–2: Crisis/Exhausted, 3–4: Low, 5–6: Neutral, 7–8: Positive/Stable, 9–10: Peak State)
   * **Mood Codes:** Format `CORE_CODE-BRANCH_IDX-SPECIFIC_IDX:INTENSITY` (e.g., `J-3-1:8`)
 * **Mood Profile Schema:** [`context/schemas/mood-selection.json`](context/schemas/mood-selection.json)
+* **Application Configuration:** [`config.json`](config.json)
 
 ---
 
@@ -71,6 +73,6 @@ Domain context files are located in `context/`:
 1. **Keep It Deterministic & Modular:**
    All taxonomy queries and prompt formatting must be deterministic and testable without network access.
 2. **Single Source of Truth:**
-   Always use [`context/mood-taxonomy.json`](context/mood-taxonomy.json) for taxonomy structure.
+   Always use [`context/mood-taxonomy.json`](context/mood-taxonomy.json) for taxonomy structure and [`config.json`](config.json) for user settings.
 3. **Unit Testing:**
-   Maintain test coverage across taxonomy traversal, invalid input handling, profile formatting, and prompt rendering.
+   Maintain test coverage across configuration loading, taxonomy traversal, invalid input handling, profile formatting, and prompt rendering.

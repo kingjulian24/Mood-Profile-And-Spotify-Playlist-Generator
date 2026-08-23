@@ -10,11 +10,11 @@ The **Mood Profile & Prompt Generator** is a lightweight, deterministic command-
 
 1. Guides the user through the canonical mood taxonomy to capture their emotional state.
 2. Constructs a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
-3. Formats the profile into a **static song-recommendation prompt**.
+3. Formats the profile into a **static song-recommendation prompt** using user-configurable application settings.
 4. Displays the final prompt for the user to copy into an external chatbot for music recommendations.
 
 > **Note on Implementation Scope:**
-> Unlike the earlier exploratory design which outlined end-to-end Spotify playlist creation and in-app LLM interpretation, the current application is intentionally simplified to focus on **Context Generation → Context Modeling → Static Prompt Assembly**. The application contains **no internal LLM runtime and no Spotify API integration**.
+> The application is focused on **Context Generation → Context Modeling → Static Prompt Assembly**. The application contains **no internal LLM runtime and no Spotify API integration**.
 
 ---
 
@@ -28,6 +28,7 @@ Context Modeling        Application structures choices into a Mood Profile and c
 Context Validation      User reviews and confirms the mood profile
         ↓
 Prompt Assembly         Static prompt template is populated with the structured mood profile
+                        and configured song count (from config.json)
         ↓
 Final Output            Completed prompt is displayed for copying into an external chatbot
 ```
@@ -38,8 +39,32 @@ Final Output            Completed prompt is displayed for copying into an extern
 
 * **Authoritative Human-in-the-Loop Selection:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
 * **Deterministic & Standalone:** Runs locally with zero external network or API dependencies.
+* **Dedicated Configuration:** User settings like `song_count` are stored in [`config.json`](config.json).
 * **Modular Prompt Templates:** Prompt templates are cleanly decoupled from CLI traversal logic.
 * **Canonical Taxonomy:** Uses [`context/mood-taxonomy.json`](context/mood-taxonomy.json) as the single source of truth.
+
+---
+
+## Configuration
+
+Application settings are managed in [`config.json`](config.json) at the root of the project:
+
+```json
+{
+  "song_count": 10
+}
+```
+
+### Changing the Number of Songs
+To change the number of songs requested in the generated prompt (e.g. to 20), update the `song_count` value in [`config.json`](config.json):
+
+```json
+{
+  "song_count": 20
+}
+```
+
+The generated prompt will immediately reflect the new setting (e.g., `"Generate 20 songs based on the following mood profile."`) without requiring any code modifications.
 
 ---
 
@@ -71,52 +96,6 @@ Run the interactive wizard:
 python3 main.py
 ```
 
-Example interaction:
-```text
-What are you feeling?
-  1. Joy — Feelings of positive valence, contentment, happiness...
-  ...
-Select core emotion [1-6]: 1
-
-Joy
-  1. Content — Calm, satisfied, or restful positive states.
-  2. Happy — General uplifted, cheerful, and pleased positive states.
-  3. Excited — High-activation, energetic, and eager positive states.
-Select branch [1-3]: 3
-
-Excited
-  1. Energetic
-  2. Enthusiastic
-Select specific emotion [1-2]: 1
-
-Emotional Intensity (1–10):
-Enter intensity [1-10]: 8
-
-Mood Profile
--------------
-Intensity: 8
-Core Emotion: Joy
-Branch: Excited
-Specific Emotion: Energetic
-Mood Code: J-3-1:8
-
-Actions: [C]onfirm & Generate Prompt | [E]dit | [R]estart | [Q]uit: c
-
-============================================================
-              GENERATED RECOMMENDATION PROMPT
-============================================================
-Generate 10 song titles based on the following mood profile.
-
-Intensity: 8
-Core Emotion: Joy
-Branch: Excited
-Specific Emotion: Energetic
-Mood Code: J-3-1:8
-
-Return the song title and artist for each recommendation.
-============================================================
-```
-
 ### 2. Direct Code Validation & Prompt Generation
 Generate a prompt directly from a mood code without interactive prompts:
 ```bash
@@ -128,12 +107,17 @@ Output as structured JSON:
 python3 main.py --code J-3-1:8 --json
 ```
 
-### 3. Display Full Taxonomy
+### 3. Using a Custom Configuration File
+```bash
+python3 main.py --config path/to/custom_config.json
+```
+
+### 4. Display Full Taxonomy
 ```bash
 python3 main.py --dump-taxonomy
 ```
 
-### 4. Run Automated Tests
+### 5. Run Automated Tests
 ```bash
 python3 -m unittest discover -s tests
 ```
@@ -146,9 +130,11 @@ python3 -m unittest discover -s tests
 .
 ├── AGENTS.md                  # Operating guidelines for AI coding agents
 ├── README.md                  # Project overview and usage documentation
+├── config.json                # User application configuration (e.g. song_count)
 ├── main.py                    # Root entrypoint
 ├── src/                       # Application source code
 │   ├── __init__.py
+│   ├── config.py              # Configuration loader and validator
 │   ├── models.py              # MoodProfile and taxonomy data models
 │   ├── taxonomy.py            # Taxonomy traversal, validation, and code parsing
 │   ├── prompt.py              # Static prompt template representation and rendering
@@ -156,6 +142,7 @@ python3 -m unittest discover -s tests
 │   └── cli.py                 # CLI argument parsing
 ├── tests/                     # Automated unit test suite
 │   ├── __init__.py
+│   ├── test_config.py         # Configuration loading and validation tests
 │   ├── test_taxonomy.py       # Taxonomy and code parsing tests
 │   ├── test_prompt.py         # Prompt template rendering tests
 │   └── test_mood_selection.py # Interactive CLI flow tests
@@ -170,5 +157,6 @@ python3 -m unittest discover -s tests
 └── tasks/                     # Task specifications
     ├── Task-001-Initialize-Project-Documentation.md
     ├── Task-002—Implement-Interactive-Mood-Selection-CLI.md
-    └── Task-003—Simplify-Application-to-Mood-Profile-Prompt-Generator.md
+    ├── Task-003—Simplify-Application-to-Mood-Profile-Prompt-Generator.md
+    └── Task-004-Add-Application-Configuration.md
 ```

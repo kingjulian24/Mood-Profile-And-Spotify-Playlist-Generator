@@ -3,6 +3,7 @@
 import unittest
 from typing import List
 
+from src.config import AppConfig
 from src.mood_selection import MoodSelectionCLI
 from src.taxonomy import MoodTaxonomy
 
@@ -30,6 +31,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
     def setUp(self):
         self.taxonomy = MoodTaxonomy()
+        self.config = AppConfig(song_count=10)
 
     def test_full_successful_flow_generates_profile_and_prompt(self):
         # Steps:
@@ -43,6 +45,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -57,9 +60,25 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertEqual(profile.code, "J-3-1:8")
 
         # Verify generated prompt
-        self.assertIn("Generate 10 song titles based on the following mood profile.", prompt)
+        self.assertIn("Generate 10 songs based on the following mood profile.", prompt)
         self.assertIn("Intensity: 8", prompt)
         self.assertIn("Mood Code: J-3-1:8", prompt)
+
+    def test_custom_song_count_in_cli(self):
+        custom_config = AppConfig(song_count=20)
+        inputs = ["1", "3", "1", "8", "c"]
+        helper = MockCLIHelper(inputs)
+
+        cli = MoodSelectionCLI(
+            taxonomy=self.taxonomy,
+            config=custom_config,
+            input_func=helper.mock_input,
+            output_func=helper.mock_print,
+        )
+        result = cli.run()
+        self.assertIsNotNone(result)
+        _, prompt = result
+        self.assertIn("Generate 20 songs based on the following mood profile.", prompt)
 
     def test_invalid_input_handling_and_reprompt(self):
         inputs = [
@@ -73,6 +92,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -92,6 +112,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -111,6 +132,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -131,6 +153,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -151,6 +174,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
+            config=self.config,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Callable, Optional, Tuple
 
+from src.config import AppConfig, load_config
 from src.models import MoodProfile
 from src.prompt import PromptTemplate, generate_recommendation_prompt
 from src.taxonomy import MoodTaxonomy
@@ -14,11 +15,13 @@ class MoodSelectionCLI:
     def __init__(
         self,
         taxonomy: Optional[MoodTaxonomy] = None,
+        config: Optional[AppConfig] = None,
         prompt_template: Optional[PromptTemplate] = None,
         input_func: Callable[[str], str] = input,
         output_func: Callable[[str], None] = print,
     ):
         self.taxonomy = taxonomy or MoodTaxonomy()
+        self.config = config or load_config()
         self.prompt_template = prompt_template or PromptTemplate()
         self._input = input_func
         self._print = output_func
@@ -192,7 +195,11 @@ class MoodSelectionCLI:
                     return None
 
                 if action in ("c", "confirm", "yes", "y", ""):
-                    prompt = generate_recommendation_prompt(profile, template=self.prompt_template)
+                    prompt = generate_recommendation_prompt(
+                        profile,
+                        config=self.config,
+                        template=self.prompt_template,
+                    )
                     self._print("\n" + "=" * 60)
                     self._print("              GENERATED RECOMMENDATION PROMPT")
                     self._print("=" * 60)
@@ -227,7 +234,8 @@ class MoodSelectionCLI:
 
 def select_mood_interactive(
     taxonomy: Optional[MoodTaxonomy] = None,
+    config: Optional[AppConfig] = None,
 ) -> Optional[Tuple[MoodProfile, str]]:
     """Convenience function to run the interactive mood selection CLI."""
-    cli = MoodSelectionCLI(taxonomy=taxonomy)
+    cli = MoodSelectionCLI(taxonomy=taxonomy, config=config)
     return cli.run()
