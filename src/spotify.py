@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,7 +18,7 @@ SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8888/callback"
-DEFAULT_SCOPE = "playlist-modify-public playlist-modify-private"
+DEFAULT_SCOPE = "playlist-modify-public playlist-modify-private user-read-private"
 DEFAULT_TOKEN_CACHE = Path(__file__).parent.parent / ".cache-spotify.json"
 
 
@@ -29,6 +30,21 @@ class SpotifyError(Exception):
 class SpotifyAuthError(SpotifyError):
     """Raised when authentication with Spotify fails or credentials are missing."""
     pass
+
+
+def extract_code_from_input(redirect_input: str) -> str:
+    """Extract clean authorization code from raw string or redirect URL."""
+    cleaned = redirect_input.strip().strip("'\"")
+    if "code=" in cleaned:
+        parsed = urllib.parse.urlparse(cleaned)
+        query = urllib.parse.parse_qs(parsed.query)
+        code = query.get("code", [""])[0]
+        if "#" in code:
+            code = code.split("#")[0]
+        return code.strip()
+    if "#" in cleaned:
+        cleaned = cleaned.split("#")[0]
+    return cleaned.strip()
 
 
 class SpotifyClient:
@@ -54,6 +70,7 @@ class SpotifyClient:
         self._input = input_func
         self._print = output_func
         self.refresh_token: Optional[str] = None
+        self.user_profile: Optional[Dict[str, Any]] = None
 
     def _http_request(
         self,
@@ -61,6 +78,7 @@ class SpotifyClient:
         method: str = "GET",
         headers: Optional[Dict[str, str]] = None,
         data: Optional[Dict[str, Any] | str | bytes] = None,
+        retry_on_401: bool = True,
     ) -> Dict[str, Any]:
         """Perform an HTTP request returning JSON data."""
         if self._http_requester:
@@ -89,45 +107,160 @@ class SpotifyClient:
             error_body = e.read().decode("utf-8")
             try:
                 err_json = json.loads(error_body)
-                msg = err_json.get("error_description") or err_json.get("error", {}).get("message") or error_body
+                err_obj = err_json.get("error")
+                if isinstance(err_obj, dict):
+                    msg = err_obj.get("message") or error_body
+                elif isinstance(err_obj, str):
+                    msg = err_obj
+                else:
+                    msg = err_json.get("error_description") or error_body
             except Exception:
                 msg = error_body
+
+            # Attempt automatic token refresh on 401 Unauthorized
+            if e.code == 401 and retry_on_401 and self.refresh_token:
+                if self.refresh_access_token():
+                    # Retry with new token
+                    new_headers = (headers or {}).copy()
+                    new_headers["Authorization"] = f"Bearer {self.access_token}"
+                    return self._http_request(
+                        url=url,
+                        method=method,
+                        headers=new_headers,
+                        data=data,
+                        retry_on_401=False,
+                    )
+
+            if e.code == 400 and "token" in url:
+                msg = f"{msg}. Note: Spotify authorization codes can only be used once and expire quickly. Please generate a new authorization URL if this code was already used."
+            elif e.code == 403:
+                msg = (
+                    f"{msg}. (If your Spotify App is in Development Mode, verify that your account email "
+                    f"is registered under 'User Management' in the Spotify Developer Dashboard)."
+                )
+
             raise SpotifyError(f"Spotify API error ({e.code}): {msg}") from e
         except Exception as e:
+            if isinstance(e, SpotifyError):
+                raise
             raise SpotifyError(f"HTTP request failed: {e}") from e
 
     def _load_cached_token(self) -> bool:
-        """Attempt to load token from disk cache."""
-        if self.token_cache_path.exists():
-            try:
-                with open(self.token_cache_path, "r", encoding="utf-8") as f:
-                    cache_data = json.load(f)
-                self.access_token = cache_data.get("access_token", "")
-                self.refresh_token = cache_data.get("refresh_token")
-                return bool(self.access_token)
-            except Exception:
+        """Attempt to load and validate tokens from disk cache."""
+        if not self.token_cache_path.exists():
+            return False
+        try:
+            with open(self.token_cache_path, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Invalidate cache if client_id does not match
+            cached_client_id = cache_data.get("client_id")
+            if cached_client_id and self.client_id and cached_client_id != self.client_id:
                 return False
-        return False
+
+            self.access_token = cache_data.get("access_token", "")
+            self.refresh_token = cache_data.get("refresh_token")
+            return bool(self.access_token)
+        except Exception:
+            return False
 
     def _save_cached_token(self, token_data: Dict[str, Any]) -> None:
         """Save tokens to disk cache."""
         try:
+            to_save = dict(token_data)
+            if self.client_id:
+                to_save["client_id"] = self.client_id
+            to_save["cached_at"] = time.time()
             with open(self.token_cache_path, "w", encoding="utf-8") as f:
-                json.dump(token_data, f)
+                json.dump(to_save, f)
         except Exception:
             pass
+
+    def _clear_cached_token(self) -> None:
+        """Remove invalid token cache file."""
+        try:
+            if self.token_cache_path.exists():
+                self.token_cache_path.unlink()
+        except Exception:
+            pass
+
+    def refresh_access_token(self) -> bool:
+        """Refresh the access token using the stored refresh_token."""
+        if not self.refresh_token or not self.client_id or not self.client_secret:
+            return False
+
+        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("utf-8")
+        headers = {
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        data = urllib.parse.urlencode({
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
+        })
+
+        try:
+            token_resp = self._http_request(
+                SPOTIFY_TOKEN_URL,
+                method="POST",
+                headers=headers,
+                data=data,
+                retry_on_401=False,
+            )
+            new_access_token = token_resp.get("access_token")
+            if new_access_token:
+                self.access_token = new_access_token
+                if token_resp.get("refresh_token"):
+                    self.refresh_token = token_resp["refresh_token"]
+                self._save_cached_token({
+                    "access_token": self.access_token,
+                    "refresh_token": self.refresh_token,
+                    "expires_in": token_resp.get("expires_in", 3600),
+                    "scope": token_resp.get("scope", DEFAULT_SCOPE),
+                })
+                return True
+        except Exception:
+            pass
+        return False
+
+    def get_current_user_profile(self) -> Dict[str, Any]:
+        """Fetch current authenticated user profile from Spotify."""
+        resp = self._http_request(f"{SPOTIFY_API_BASE}/me", headers=self._get_auth_headers())
+        self.user_profile = resp
+        return resp
 
     def authenticate(self) -> None:
         """
         Authenticate with Spotify using available credentials or cached tokens.
-        Raises SpotifyAuthError if authentication cannot be completed.
+        Validates access and displays active user profile diagnostics.
         """
+        # Step 1: Check existing access token or load cache
+        if not self.access_token:
+            self._load_cached_token()
+
+        # Step 2: Validate token if present
         if self.access_token:
-            return
+            try:
+                profile = self.get_current_user_profile()
+                user_id = profile.get("id", "Unknown")
+                display_name = profile.get("display_name") or user_id
+                self._print(f"[✓] Authenticated with Spotify as: {display_name} (User ID: {user_id})")
+                return
+            except SpotifyError as e:
+                # Attempt refresh
+                if self.refresh_access_token():
+                    try:
+                        profile = self.get_current_user_profile()
+                        user_id = profile.get("id", "Unknown")
+                        display_name = profile.get("display_name") or user_id
+                        self._print(f"[✓] Authenticated with Spotify as: {display_name} (User ID: {user_id})")
+                        return
+                    except Exception:
+                        pass
+                self._clear_cached_token()
+                self.access_token = ""
 
-        if self._load_cached_token():
-            return
-
+        # Step 3: Run OAuth Authorization Code Flow
         if not self.client_id or not self.client_secret:
             raise SpotifyAuthError(
                 "Spotify credentials not found.\n"
@@ -136,12 +269,12 @@ class SpotifyClient:
                 "See README.md for Spotify developer setup instructions."
             )
 
-        # Generate authorization URL
         params = {
             "client_id": self.client_id,
             "response_type": "code",
             "redirect_uri": self.redirect_uri,
             "scope": DEFAULT_SCOPE,
+            "show_dialog": "true",
         }
         auth_url = f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
@@ -151,19 +284,14 @@ class SpotifyClient:
         self._print("To authenticate with Spotify, open the following URL in your browser:\n")
         self._print(f"  {auth_url}\n")
         self._print("After authorizing, you will be redirected to your redirect URI.")
-        self._print("Copy the full redirect URL (or authorization code) and paste it below.")
+        self._print("Copy the full redirect URL (or authorization code) from your browser and paste it below.")
         self._print("=" * 60)
 
         redirect_input = self._input("\nEnter redirect URL or code: ").strip()
         if not redirect_input:
             raise SpotifyAuthError("No authorization code provided.")
 
-        code = redirect_input
-        if "code=" in redirect_input:
-            parsed = urllib.parse.urlparse(redirect_input)
-            query = urllib.parse.parse_qs(parsed.query)
-            code = query.get("code", [""])[0]
-
+        code = extract_code_from_input(redirect_input)
         if not code:
             raise SpotifyAuthError("Failed to extract authorization code from input.")
 
@@ -179,7 +307,13 @@ class SpotifyClient:
             "redirect_uri": self.redirect_uri,
         })
 
-        token_resp = self._http_request(SPOTIFY_TOKEN_URL, method="POST", headers=headers, data=data)
+        token_resp = self._http_request(
+            SPOTIFY_TOKEN_URL,
+            method="POST",
+            headers=headers,
+            data=data,
+            retry_on_401=False,
+        )
         self.access_token = token_resp.get("access_token", "")
         self.refresh_token = token_resp.get("refresh_token")
 
@@ -187,7 +321,15 @@ class SpotifyClient:
             raise SpotifyAuthError("Failed to obtain access token from Spotify.")
 
         self._save_cached_token(token_resp)
-        self._print("[✓] Spotify authentication successful.\n")
+
+        # Retrieve and log active user diagnostics
+        try:
+            profile = self.get_current_user_profile()
+            user_id = profile.get("id", "Unknown")
+            display_name = profile.get("display_name") or user_id
+            self._print(f"[✓] Spotify authentication successful: {display_name} (User ID: {user_id})\n")
+        except Exception:
+            self._print("[✓] Spotify authentication successful.\n")
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """Return Authorization headers."""
@@ -269,8 +411,10 @@ class SpotifyClient:
 
     def get_current_user_id(self) -> str:
         """Fetch current authenticated user ID from Spotify."""
-        resp = self._http_request(f"{SPOTIFY_API_BASE}/me", headers=self._get_auth_headers())
-        user_id = resp.get("id")
+        if self.user_profile and "id" in self.user_profile:
+            return self.user_profile["id"]
+        profile = self.get_current_user_profile()
+        user_id = profile.get("id")
         if not user_id:
             raise SpotifyError("Unable to retrieve user ID from Spotify profile.")
         return user_id
@@ -287,7 +431,6 @@ class SpotifyClient:
         if not tracks:
             raise SpotifyError("Cannot create a playlist with zero resolved tracks.")
 
-        user_id = self.get_current_user_id()
         playlist_name = profile.format_playlist_name()
         description = (
             f"Generated by Mood Profile & Prompt Generator | "
@@ -300,8 +443,9 @@ class SpotifyClient:
             "public": public,
         }
 
+        # POST /v1/me/playlists
         create_resp = self._http_request(
-            f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
+            f"{SPOTIFY_API_BASE}/me/playlists",
             method="POST",
             headers=self._get_auth_headers(),
             data=payload,
@@ -311,14 +455,14 @@ class SpotifyClient:
         playlist_url = create_resp.get("external_urls", {}).get("spotify", "")
 
         if not playlist_id:
-            raise SpotifyError("Failed to create Spotify playlist.")
+            raise SpotifyError("Failed to create Spotify playlist: response did not include playlist ID.")
 
         # Add tracks in batches of up to 100
         uris = [t.spotify_uri for t in tracks if t.spotify_uri]
         for i in range(0, len(uris), 100):
             batch = uris[i : i + 100]
             self._http_request(
-                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
+                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
                 method="POST",
                 headers=self._get_auth_headers(),
                 data={"uris": batch},

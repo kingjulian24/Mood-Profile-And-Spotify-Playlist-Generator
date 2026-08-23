@@ -1,0 +1,40 @@
+{
+    "songs": [
+        {
+            "title": "Shut Up and Dance",
+            "artist": "WALK THE MOON"
+        },
+        {
+            "title": "Can't Hold Us",
+            "artist": "Macklemore & Ryan Lewis feat. Ray Dalton"
+        },
+        {
+            "title": "Levitating",
+            "artist": "Dua Lipa"
+        },
+        {
+            "title": "Uptown Funk",
+            "artist": "Mark Ronson feat. Bruno Mars"
+        },
+        {
+            "title": "I Gotta Feeling",
+            "artist": "Black Eyed Peas"
+        },
+        {
+            "title": "24K Magic",
+            "artist": "Bruno Mars"
+        },
+        {
+            "title": "Dog Days Are Over",
+            "artist": "Florence + The Machine"
+        },
+        {
+            "title": "Mr. Blue Sky",
+            "artist": "Electric Light Orchestra"
+        },
+        {
+            "title": "Hey Ya!",
+            "artist": "Outkast"
+        }
+    ]
+}

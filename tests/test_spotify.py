@@ -1,4 +1,4 @@
-"""Unit tests for Spotify integration, environment variable credentials, track resolution, and playlist creation."""
+"""Unit tests for Spotify integration, environment variable credentials, token refresh, and playlist creation."""
 
 import base64
 import os
@@ -9,7 +9,13 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
 from src.models import MoodProfile, ResolvedTrack, SongRecommendation
-from src.spotify import DEFAULT_REDIRECT_URI, SpotifyAuthError, SpotifyClient, SpotifyError
+from src.spotify import (
+    DEFAULT_REDIRECT_URI,
+    SpotifyAuthError,
+    SpotifyClient,
+    SpotifyError,
+    extract_code_from_input,
+)
 
 
 class MockSpotifyHTTPRequester:
@@ -71,11 +77,11 @@ class MockSpotifyHTTPRequester:
                     return val
             return {"tracks": {"items": []}}
 
-        if "/me" in url:
+        if "/me" in url and method == "GET":
             return {"id": "test_user_123", "display_name": "Test User"}
 
         if "/playlists" in url and method == "POST":
-            if "/tracks" in url:
+            if "/items" in url or "/tracks" in url:
                 self.added_tracks.append({"url": url, "data": data})
                 return {"snapshot_id": "snapshot_123"}
             else:
@@ -93,7 +99,7 @@ class MockSpotifyHTTPRequester:
 
 
 class TestSpotifyIntegration(unittest.TestCase):
-    """Test suite for Spotify track resolution, environment credentials, and playlist creation."""
+    """Test suite for Spotify track resolution, environment credentials, token handling, and playlist creation."""
 
     def setUp(self):
         self.mock_http = MockSpotifyHTTPRequester()
@@ -115,6 +121,16 @@ class TestSpotifyIntegration(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_extract_code_from_input(self):
+        url1 = "http://127.0.0.1:8888/callback?code=AQD123_abc"
+        self.assertEqual(extract_code_from_input(url1), "AQD123_abc")
+
+        url2 = "http://127.0.0.1:8888/callback?code=AQD123_abc#_=_"
+        self.assertEqual(extract_code_from_input(url2), "AQD123_abc")
+
+        raw_code = "  AQD123_raw#_=_  "
+        self.assertEqual(extract_code_from_input(raw_code), "AQD123_raw")
 
     def test_missing_credentials_raises_auth_error(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -151,7 +167,7 @@ class TestSpotifyIntegration(unittest.TestCase):
             client = SpotifyClient(token_cache_path=self.temp_cache)
             self.assertEqual(client.redirect_uri, DEFAULT_REDIRECT_URI)
 
-    def test_access_token_env_var_bypasses_oauth_exchange(self):
+    def test_access_token_env_var_validates_user_profile(self):
         env_vars = {"SPOTIFY_ACCESS_TOKEN": "direct_env_token_abc"}
         with patch.dict(os.environ, env_vars, clear=True):
             client = SpotifyClient(
@@ -160,20 +176,21 @@ class TestSpotifyIntegration(unittest.TestCase):
             )
             client.authenticate()
             self.assertEqual(client.access_token, "direct_env_token_abc")
-            self.assertIsNone(self.mock_http.last_token_request)
+            self.assertEqual(client.get_current_user_id(), "test_user_123")
 
-    def test_oauth_token_exchange_uses_env_credentials(self):
+    def test_oauth_token_exchange_and_user_profile(self):
         env_vars = {
             "SPOTIFY_CLIENT_ID": "test_id_123",
             "SPOTIFY_CLIENT_SECRET": "test_secret_456",
             "SPOTIFY_REDIRECT_URI": "http://127.0.0.1:8888/callback",
         }
+        outputs = []
         with patch.dict(os.environ, env_vars, clear=True):
             client = SpotifyClient(
                 token_cache_path=self.temp_cache,
                 http_requester=self.mock_http,
                 input_func=lambda prompt: "http://127.0.0.1:8888/callback?code=mock_code_xyz",
-                output_func=lambda msg: None,
+                output_func=lambda msg: outputs.append(msg),
             )
             client.authenticate()
             self.assertEqual(client.access_token, "mock_generated_access_token_789")
@@ -183,6 +200,10 @@ class TestSpotifyIntegration(unittest.TestCase):
             expected_basic = base64.b64encode("test_id_123:test_secret_456".encode()).decode()
             auth_header = self.mock_http.last_token_request["headers"].get("Authorization")
             self.assertEqual(auth_header, f"Basic {expected_basic}")
+
+            # Verify user diagnostic output
+            self.assertTrue(any("Test User" in m for m in outputs))
+            self.assertTrue(any("test_user_123" in m for m in outputs))
 
     def test_search_track_found(self):
         track = self.client.search_track("September", "Earth, Wind & Fire")
