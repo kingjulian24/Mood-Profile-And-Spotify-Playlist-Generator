@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MoodSelection",
+  "type": "object",
+  "description": "Structured mood context produced deterministically by the user through interactive mood selection.",
+  "required": [
+    "code",
+    "intensity",
+    "core_emotion",
+    "branch",
+    "specific_emotion",
+    "taxonomy_path"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Canonical mood code encoding core, branch, specific emotion, and intensity (e.g. 'J-3-1:8')."
+    },
+    "intensity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Emotional energy activation level on a 1-10 scale."
+    },
+    "core_emotion": {
+      "type": "string",
+      "enum": ["Joy", "Sadness", "Anger", "Fear", "Disgust", "Surprise"],
+      "description": "Top-level core emotion from taxonomy."
+    },
+    "branch": {
+      "type": "string",
+      "description": "Secondary emotional branch."
+    },
+    "specific_emotion": {
+      "type": "string",
+      "description": "Specific granular emotion."
+    },
+    "intensity_label": {
+      "type": "string",
+      "description": "Descriptive label for intensity bracket (e.g. 'Positive / Stable')."
+    },
+    "intensity_description": {
+      "type": "string",
+      "description": "Description of the energy activation bracket."
+    },
+    "taxonomy_path": {
+      "type": "object",
+      "required": ["core_index", "branch_index", "specific_index", "core_emotion", "branch", "specific_emotion"],
+      "properties": {
+        "core_index": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "branch_index": { "type": "integer", "minimum": 1 },
+        "specific_index": { "type": "integer", "minimum": 1 },
+        "core_emotion": { "type": "string" },
+        "branch": { "type": "string" },
+        "specific_emotion": { "type": "string" }
+      }
+    }
+  }
+}

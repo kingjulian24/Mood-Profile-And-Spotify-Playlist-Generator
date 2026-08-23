@@ -6,9 +6,7 @@
   "required": [
     "trace_id",
     "timestamp",
-    "user_input",
-    "mood_interpretation",
-    "user_verification",
+    "mood_selection",
     "verified_mood",
     "candidates_generated_count",
     "candidates_verified_count",
@@ -24,24 +22,9 @@
       "type": "string",
       "format": "date-time"
     },
-    "user_input": {
-      "type": "string",
-      "description": "Original natural-language description from user."
-    },
-    "mood_interpretation": {
+    "mood_selection": {
       "type": "object",
-      "description": "AI inferred mood."
-    },
-    "user_verification": {
-      "type": "object",
-      "required": ["status"],
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": ["confirmed", "corrected", "clarified"]
-        },
-        "user_feedback": { "type": "string" }
-      }
+      "description": "User's explicit structured mood selection and mood code."
     },
     "verified_mood": {
       "type": "object",
