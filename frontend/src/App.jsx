@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api/client';
+import { MoodSelection } from './components/MoodSelection';
+import { MoodProfileView } from './components/MoodProfileView';
 
 export function App() {
   const [backendStatus, setBackendStatus] = useState({
@@ -12,8 +14,19 @@ export function App() {
   const [config, setConfig] = useState(null);
   const [taxonomy, setTaxonomy] = useState(null);
 
+  // Mood Selection States
+  const [selectedCore, setSelectedCore] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedSpecific, setSelectedSpecific] = useState('');
+  const [intensity, setIntensity] = useState(7);
+
+  // Generated Profile State
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+
   useEffect(() => {
-    async function checkBackendConnection() {
+    async function initApp() {
       try {
         const [health, cfg, tax] = await Promise.all([
           api.getHealth(),
@@ -38,8 +51,57 @@ export function App() {
       }
     }
 
-    checkBackendConnection();
+    initApp();
   }, []);
+
+  // Invalidation handlers for progressive selection
+  const handleSelectCore = (coreName) => {
+    setSelectedCore(coreName);
+    setSelectedBranch('');
+    setSelectedSpecific('');
+    setProfile(null);
+    setProfileError(null);
+  };
+
+  const handleSelectBranch = (branchName) => {
+    setSelectedBranch(branchName);
+    setSelectedSpecific('');
+    setProfile(null);
+    setProfileError(null);
+  };
+
+  const handleSelectSpecific = (specificName) => {
+    setSelectedSpecific(specificName);
+    setProfile(null);
+    setProfileError(null);
+  };
+
+  const handleSelectIntensity = (intensityVal) => {
+    setIntensity(intensityVal);
+    setProfile(null);
+    setProfileError(null);
+  };
+
+  const handleGenerateProfile = async () => {
+    if (!selectedCore || !selectedBranch || !selectedSpecific || !intensity) return;
+
+    setLoadingProfile(true);
+    setProfileError(null);
+
+    try {
+      const generatedProfile = await api.generateProfile({
+        core_emotion: selectedCore,
+        branch: selectedBranch,
+        specific_emotion: selectedSpecific,
+        intensity: intensity,
+      });
+      setProfile(generatedProfile);
+    } catch (err) {
+      setProfileError(err.message || 'Failed to generate mood profile.');
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   return (
     <div className="app-container">
@@ -71,7 +133,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Progressive Workflow Shell */}
+      {/* Progressive Workflow */}
       <main>
         {/* Step 1: Your Mood */}
         <section className="card" id="step-mood">
@@ -82,39 +144,30 @@ export function App() {
             </div>
             {taxonomy && (
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {taxonomy.core_emotions?.length} Core Emotions Available
+                {taxonomy.core_emotions?.length} Core Emotions
               </span>
             )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-            Select your core emotion, branch, specific emotion, and emotional intensity.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', opacity: 0.85 }}>
-            <div className="form-group">
-              <label className="form-label">Core Emotion</label>
-              <select className="form-select" disabled>
-                <option>Joy (Select in Task 013)</option>
-              </select>
+
+          <MoodSelection
+            taxonomy={taxonomy}
+            selectedCore={selectedCore}
+            onSelectCore={handleSelectCore}
+            selectedBranch={selectedBranch}
+            onSelectBranch={handleSelectBranch}
+            selectedSpecific={selectedSpecific}
+            onSelectSpecific={handleSelectSpecific}
+            intensity={intensity}
+            onSelectIntensity={handleSelectIntensity}
+            onGenerateProfile={handleGenerateProfile}
+            loading={loadingProfile}
+          />
+
+          {profileError && (
+            <div className="error-banner" style={{ marginTop: '1rem' }}>
+              {profileError}
             </div>
-            <div className="form-group">
-              <label className="form-label">Branch</label>
-              <select className="form-select" disabled>
-                <option>Excited</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Specific Emotion</label>
-              <select className="form-select" disabled>
-                <option>Energetic</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Intensity (1–10)</label>
-              <select className="form-select" disabled>
-                <option>8 — Positive / Stable</option>
-              </select>
-            </div>
-          </div>
+          )}
         </section>
 
         {/* Step 2: Mood Profile */}
@@ -124,14 +177,19 @@ export function App() {
               <span className="card-step-badge">Step 2</span>
               <h2 className="card-title">Mood Profile</h2>
             </div>
+            {profile && (
+              <span className="status-pill status-online">
+                <span className="status-dot"></span>
+                Active Profile
+              </span>
+            )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            The structured emotional context modeling representing your selections.
-          </p>
+
+          <MoodProfileView profile={profile} />
         </section>
 
         {/* Step 3: Recommendation Prompt */}
-        <section className="card" id="step-prompt">
+        <section className="card" id="step-prompt" style={{ opacity: profile ? 1 : 0.6 }}>
           <div className="card-header">
             <div>
               <span className="card-step-badge">Step 3</span>
@@ -149,7 +207,7 @@ export function App() {
         </section>
 
         {/* Step 4: Song Recommendations */}
-        <section className="card" id="step-import">
+        <section className="card" id="step-import" style={{ opacity: 0.6 }}>
           <div className="card-header">
             <div>
               <span className="card-step-badge">Step 4</span>
@@ -162,7 +220,7 @@ export function App() {
         </section>
 
         {/* Step 5: Spotify Resolution & Playlist */}
-        <section className="card" id="step-spotify">
+        <section className="card" id="step-spotify" style={{ opacity: 0.6 }}>
           <div className="card-header">
             <div>
               <span className="card-step-badge">Step 5</span>
