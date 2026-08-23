@@ -1,28 +1,34 @@
-"""Interactive command-line interface for deterministic mood selection and prompt generation."""
+"""Interactive command-line interface for mood selection, prompt generation, and Spotify playlist creation."""
 
 from __future__ import annotations
-from typing import Callable, Optional, Tuple
+import sys
+from pathlib import Path
+from typing import Callable, List, Optional, Tuple
 
 from src.config import AppConfig, load_config
-from src.models import MoodProfile
+from src.models import MoodProfile, PlaylistResult, SongRecommendation
 from src.prompt import PromptTemplate, generate_recommendation_prompt
+from src.song_parser import SongParseError, parse_song_list
+from src.spotify import SpotifyClient, SpotifyError
 from src.taxonomy import MoodTaxonomy
 
 
 class MoodSelectionCLI:
-    """Guides the user through mood selection, produces a mood profile, and renders a recommendation prompt."""
+    """Guides the user through mood selection, prompt generation, and Spotify playlist creation."""
 
     def __init__(
         self,
         taxonomy: Optional[MoodTaxonomy] = None,
         config: Optional[AppConfig] = None,
         prompt_template: Optional[PromptTemplate] = None,
+        spotify_client: Optional[SpotifyClient] = None,
         input_func: Callable[[str], str] = input,
         output_func: Callable[[str], None] = print,
     ):
         self.taxonomy = taxonomy or MoodTaxonomy()
         self.config = config or load_config()
         self.prompt_template = prompt_template or PromptTemplate()
+        self.spotify_client = spotify_client
         self._input = input_func
         self._print = output_func
 
@@ -54,6 +60,96 @@ class MoodSelectionCLI:
             except ValueError:
                 back_msg = " or 'b' to go back" if allow_back else ""
                 self._print(f"  [!] Invalid input. Please enter a valid number ({min_val}–{max_val}){back_msg}.")
+
+    def _read_multiline_input(self) -> str:
+        """Read multiline text from user until an empty line or EOF."""
+        self._print("\nPaste the chatbot's response below.")
+        self._print("(Enter a blank line or press Ctrl+D when finished):")
+        lines: List[str] = []
+        while True:
+            try:
+                line = self._input()
+                if not line and lines:
+                    break
+                lines.append(line)
+            except EOFError:
+                break
+        return "\n".join(lines).strip()
+
+    def process_song_import_and_playlist(
+        self,
+        profile: MoodProfile,
+        raw_song_data: Optional[str] = None,
+    ) -> Optional[PlaylistResult]:
+        """Parse songs, resolve against Spotify, and create a playlist."""
+        if not raw_song_data:
+            raw_song_data = self._read_multiline_input()
+
+        if not raw_song_data:
+            self._print("[!] No song data provided.")
+            return None
+
+        # Check if input is a file path
+        potential_path = Path(raw_song_data.strip())
+        if potential_path.is_file():
+            try:
+                with open(potential_path, "r", encoding="utf-8") as f:
+                    raw_song_data = f.read()
+            except Exception as e:
+                self._print(f"[!] Failed to read file '{potential_path}': {e}")
+                return None
+
+        try:
+            recommendations = parse_song_list(raw_song_data, format_hint=self.config.output_format)
+            self._print(f"\n[✓] Successfully parsed {len(recommendations)} song recommendation(s).")
+        except SongParseError as e:
+            self._print(f"\n[!] Failed to parse song list: {e}")
+            return None
+
+        spotify = self.spotify_client or SpotifyClient(input_func=self._input, output_func=self._print)
+
+        try:
+            self._print("\nResolving tracks against Spotify catalog...")
+            resolved, unresolved = spotify.resolve_songs(recommendations)
+        except Exception as e:
+            self._print(f"\n[!] Spotify resolution error: {e}")
+            return None
+
+        self._print(f"\nResolution Results:")
+        self._print(f"  • Resolved:   {len(resolved)} / {len(recommendations)} tracks")
+        if unresolved:
+            self._print(f"  • Unresolved: {len(unresolved)} / {len(recommendations)} tracks")
+
+        if resolved:
+            self._print("\nResolved Tracks:")
+            for i, track in enumerate(resolved, 1):
+                self._print(f"  {i:2d}. {track.title} — {track.artist} ({track.spotify_uri})")
+
+        if unresolved:
+            self._print("\nUnresolved Recommendations:")
+            for i, unres in enumerate(unresolved, 1):
+                self._print(f"  {i:2d}. {unres.title} — {unres.artist} [Reason: {unres.reason}]")
+
+        if not resolved:
+            self._print("\n[!] No tracks could be resolved on Spotify. Playlist creation aborted.")
+            return None
+
+        try:
+            self._print(f"\nCreating Spotify playlist: '{profile.format_playlist_name()}'...")
+            playlist_result = spotify.create_playlist(profile=profile, tracks=resolved)
+            playlist_result.unresolved_tracks = unresolved
+
+            self._print("\n" + "=" * 60)
+            self._print("               SPOTIFY PLAYLIST CREATED")
+            self._print("=" * 60)
+            self._print(f"  Playlist Name: {playlist_result.playlist_name}")
+            self._print(f"  Playlist URL:  {playlist_result.playlist_url}")
+            self._print(f"  Tracks Added:  {playlist_result.success_count} / {playlist_result.total_recommendations}")
+            self._print("=" * 60 + "\n")
+            return playlist_result
+        except SpotifyError as e:
+            self._print(f"\n[!] Failed to create playlist on Spotify: {e}")
+            return None
 
     def run(self) -> Optional[Tuple[MoodProfile, str]]:
         """
@@ -206,6 +302,18 @@ class MoodSelectionCLI:
                     self._print(prompt)
                     self._print("=" * 60)
                     self._print("\nCopy and paste the prompt above into an external chatbot.\n")
+
+                    # Offer to import chatbot song response
+                    try:
+                        next_action = self._input(
+                            "Next: [I]mport chatbot songs & create Spotify playlist | [Q]uit: "
+                        ).strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        return profile, prompt
+
+                    if next_action in ("i", "import", "p", "paste"):
+                        self.process_song_import_and_playlist(profile)
+
                     return profile, prompt
                 elif action in ("r", "restart"):
                     self._print("\n[i] Restarting selection from Step 1...")
@@ -235,7 +343,8 @@ class MoodSelectionCLI:
 def select_mood_interactive(
     taxonomy: Optional[MoodTaxonomy] = None,
     config: Optional[AppConfig] = None,
+    spotify_client: Optional[SpotifyClient] = None,
 ) -> Optional[Tuple[MoodProfile, str]]:
     """Convenience function to run the interactive mood selection CLI."""
-    cli = MoodSelectionCLI(taxonomy=taxonomy, config=config)
+    cli = MoodSelectionCLI(taxonomy=taxonomy, config=config, spotify_client=spotify_client)
     return cli.run()

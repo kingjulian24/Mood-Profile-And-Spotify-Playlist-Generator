@@ -1,18 +1,21 @@
 # AGENTS.md — Agent Operating Instructions & Context
 
-Welcome to the **Mood Profile & Prompt Generator** project. This document defines the operating context, architectural boundaries, data contracts, and implementation rules for AI agents contributing to this codebase.
+Welcome to the **Mood Profile & Spotify Playlist Generator** project. This document defines the operating context, architectural boundaries, data contracts, and implementation rules for AI agents contributing to this codebase.
 
 ---
 
 ## 1. Project Purpose & Scope
 
-The application **determines a structured mood profile through an interactive CLI and generates a machine-readable prompt that can be submitted to an external chatbot for song recommendations.**
+The application:
+1. **Determines a structured mood profile** through an interactive deterministic CLI.
+2. **Generates a machine-readable prompt** (`json`, `csv`, or `yaml`) submitted to an external chatbot for song recommendations.
+3. **Ingests and parses the chatbot's song recommendations** (`title` and `artist`).
+4. **Resolves songs against the Spotify Web API** and creates a Spotify playlist populated with resolved tracks.
 
 The application itself:
-* Does **not** execute LLMs or make external AI API calls.
-* Does **not** integrate with the Spotify API, authenticate users, or create playlists (these belong to future phases).
-* Does **not** yet parse or process the chatbot's response.
-* Is deterministic, lightweight, and focused on **Context Generation → Context Modeling → Static Prompt Assembly**.
+* Does **not** execute LLMs or generate song recommendations directly (the user uses an external chatbot for song reasoning).
+* Performs all Spotify operations (authentication, catalog searching, track resolution, playlist CRUD) **deterministically**.
+* Handles partial resolution gracefully and logs unresolved songs.
 
 ---
 
@@ -29,12 +32,11 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 3. **Machine-Readable Output Contracts:**
    Prompts instruct the external chatbot to return structured song data (`json`, `csv`, or `yaml`) with required `title` and `artist` fields, without conversational prose.
 
-4. **Separation of Configuration, Template, and Interaction:**
-   - User settings (`song_count`, `output_format`) are maintained externally in [`config.json`](config.json) and loaded via [`src/config.py`](src/config.py).
-   - The prompt templates ([`src/prompt.py`](src/prompt.py)) are decoupled from the CLI interaction logic ([`src/mood_selection.py`](src/mood_selection.py)).
+4. **Spotify is the Authority on Catalog and Tracks:**
+   Songs returned by external chatbots are treated as unverified candidates until resolved deterministically against the Spotify Web API.
 
 5. **No Premature Infrastructure:**
-   No vector databases, external APIs, LLM runtimes, or complex frameworks.
+   No vector databases, external AI runtimes, or unnecessary heavy frameworks.
 
 ---
 
@@ -51,7 +53,13 @@ Structured Mood Profile (src/models.py: MoodProfile)
  ↓
 Machine-Readable Prompt Template (src/prompt.py: PromptTemplate & src/config.py)
  ↓
-Final Recommendation Prompt (displayed for user to copy)
+External Chatbot Recommendation (Outside Application)
+ ↓
+Song Ingestion & Validation (src/song_parser.py)
+ ↓
+Spotify Track Resolution & Playlist Creation (src/spotify.py)
+ ↓
+Spotify Playlist Result (src/models.py: PlaylistResult)
 ```
 
 ---
@@ -73,8 +81,10 @@ Domain context files are located in `context/`:
 ## 5. Development Guidelines
 
 1. **Keep It Deterministic & Modular:**
-   All taxonomy queries and prompt formatting must be deterministic and testable without network access.
-2. **Single Source of Truth:**
+   All taxonomy queries, parsing, and prompt formatting must be deterministic and testable without live network access.
+2. **Mocking External APIs in Tests:**
+   All Spotify operations must be tested using test doubles/mocks. Live Spotify credentials must never be required for automated test suites.
+3. **Security & Secrets:**
+   Never hardcode client IDs, secrets, or access tokens. Use environment variables (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_ACCESS_TOKEN`).
+4. **Single Source of Truth:**
    Always use [`context/mood-taxonomy.json`](context/mood-taxonomy.json) for taxonomy structure and [`config.json`](config.json) for user settings.
-3. **Unit Testing:**
-   Maintain test coverage across configuration loading, output format validation, taxonomy traversal, invalid input handling, profile formatting, and prompt rendering.

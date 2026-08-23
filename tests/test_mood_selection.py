@@ -1,11 +1,14 @@
-"""Tests for MoodSelectionCLI interactive workflow and prompt generation."""
+"""Tests for MoodSelectionCLI interactive workflow, prompt generation, and Spotify playlist creation."""
 
 import unittest
 from typing import List
 
 from src.config import AppConfig
+from src.models import MoodProfile, ResolvedTrack
 from src.mood_selection import MoodSelectionCLI
+from src.spotify import SpotifyClient
 from src.taxonomy import MoodTaxonomy
+from tests.test_spotify import MockSpotifyHTTPRequester
 
 
 class MockCLIHelper:
@@ -27,25 +30,26 @@ class MockCLIHelper:
 
 
 class TestMoodSelectionCLI(unittest.TestCase):
-    """Test suite for interactive CLI mood selection and prompt output."""
+    """Test suite for interactive CLI mood selection, prompt output, and playlist import."""
 
     def setUp(self):
         self.taxonomy = MoodTaxonomy()
-        self.config = AppConfig(song_count=10)
+        self.config = AppConfig(song_count=10, output_format="json")
+        self.mock_http = MockSpotifyHTTPRequester()
+        self.spotify_client = SpotifyClient(
+            access_token="test_valid_access_token",
+            http_requester=self.mock_http,
+        )
 
     def test_full_successful_flow_generates_profile_and_prompt(self):
-        # Steps:
-        # 1: Core Emotion (1 = Joy)
-        # 2: Branch (3 = Excited)
-        # 3: Specific Emotion (1 = Energetic)
-        # 4: Intensity (8)
-        # 5: Confirm & Generate Prompt (c)
-        inputs = ["1", "3", "1", "8", "c"]
+        # Steps: 1 (Joy) -> 3 (Excited) -> 1 (Energetic) -> 8 -> 'c' -> 'q'
+        inputs = ["1", "3", "1", "8", "c", "q"]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -58,20 +62,36 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertEqual(profile.specific_emotion, "Energetic")
         self.assertEqual(profile.intensity, 8)
         self.assertEqual(profile.code, "J-3-1:8")
-
-        # Verify generated prompt
         self.assertIn("Generate 10 songs based on the following mood profile.", prompt)
-        self.assertIn("Intensity: 8", prompt)
-        self.assertIn("Mood Code: J-3-1:8", prompt)
+
+    def test_import_songs_and_create_playlist(self):
+        json_songs = '{"songs": [{"title": "September", "artist": "Earth, Wind & Fire"}]}'
+        # Steps: 1 (Joy) -> 3 (Excited) -> 1 (Energetic) -> 8 -> 'c' -> 'i' (import) -> paste songs -> blank line
+        inputs = ["1", "3", "1", "8", "c", "i", json_songs, ""]
+        helper = MockCLIHelper(inputs)
+
+        cli = MoodSelectionCLI(
+            taxonomy=self.taxonomy,
+            config=self.config,
+            spotify_client=self.spotify_client,
+            input_func=helper.mock_input,
+            output_func=helper.mock_print,
+        )
+        result = cli.run()
+        self.assertIsNotNone(result)
+        self.assertTrue(any("SPOTIFY PLAYLIST CREATED" in out for out in helper.outputs))
+        self.assertEqual(len(self.mock_http.created_playlists), 1)
+        self.assertEqual(self.mock_http.created_playlists[0]["name"], "Joy — Excited — Energetic")
 
     def test_custom_song_count_in_cli(self):
-        custom_config = AppConfig(song_count=20)
-        inputs = ["1", "3", "1", "8", "c"]
+        custom_config = AppConfig(song_count=20, output_format="json")
+        inputs = ["1", "3", "1", "8", "c", "q"]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=custom_config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -86,13 +106,14 @@ class TestMoodSelectionCLI(unittest.TestCase):
             "abc", "0", "2",
             "9", "1",
             "15", "-1", "7",
-            "c",
+            "c", "q"
         ]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -107,12 +128,13 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertEqual(profile.code, "J-2-1:7")
 
     def test_back_navigation(self):
-        inputs = ["2", "b", "1", "3", "b", "1", "2", "5", "c"]
+        inputs = ["2", "b", "1", "3", "b", "1", "2", "5", "c", "q"]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -127,12 +149,13 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertEqual(profile.code, "J-1-2:5")
 
     def test_restart_flow(self):
-        inputs = ["1", "3", "1", "8", "r", "3", "1", "2", "6", "c"]
+        inputs = ["1", "3", "1", "8", "r", "3", "1", "2", "6", "c", "q"]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -148,12 +171,13 @@ class TestMoodSelectionCLI(unittest.TestCase):
         self.assertIn("Mood Code: A-1-2:6", prompt)
 
     def test_edit_step_flow(self):
-        inputs = ["1", "3", "1", "8", "e", "4", "10", "c"]
+        inputs = ["1", "3", "1", "8", "e", "4", "10", "c", "q"]
         helper = MockCLIHelper(inputs)
 
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )
@@ -175,6 +199,7 @@ class TestMoodSelectionCLI(unittest.TestCase):
         cli = MoodSelectionCLI(
             taxonomy=self.taxonomy,
             config=self.config,
+            spotify_client=self.spotify_client,
             input_func=helper.mock_input,
             output_func=helper.mock_print,
         )

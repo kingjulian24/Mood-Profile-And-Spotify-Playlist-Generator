@@ -1,0 +1,173 @@
+"""Unit tests for Spotify integration, track resolution, and playlist creation."""
+
+import unittest
+from typing import Any, Dict, List, Optional
+from src.models import MoodProfile, ResolvedTrack, SongRecommendation
+from src.spotify import SpotifyAuthError, SpotifyClient, SpotifyError
+
+
+class MockSpotifyHTTPRequester:
+    """Mock HTTP requester simulating Spotify Web API endpoints."""
+
+    def __init__(self):
+        self.search_db: Dict[str, Dict[str, Any]] = {
+            "september": {
+                "tracks": {
+                    "items": [
+                        {
+                            "name": "September",
+                            "artists": [{"name": "Earth, Wind & Fire"}],
+                            "uri": "spotify:track:september123",
+                            "id": "september123",
+                            "external_urls": {"spotify": "https://open.spotify.com/track/september123"},
+                            "album": {"name": "The Best of Earth, Wind & Fire"},
+                        }
+                    ]
+                }
+            },
+            "weightless": {
+                "tracks": {
+                    "items": [
+                        {
+                            "name": "Weightless",
+                            "artists": [{"name": "Marconi Union"}],
+                            "uri": "spotify:track:weightless456",
+                            "id": "weightless456",
+                            "external_urls": {"spotify": "https://open.spotify.com/track/weightless456"},
+                            "album": {"name": "Weightless (Ambient Transmissions Vol. 2)"},
+                        }
+                    ]
+                }
+            },
+        }
+        self.created_playlists: List[Dict[str, Any]] = []
+        self.added_tracks: List[Dict[str, Any]] = []
+
+    def __call__(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: Optional[Dict[str, str]] = None,
+        data: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        if "/search" in url:
+            for key, val in self.search_db.items():
+                if key in url.lower():
+                    return val
+            return {"tracks": {"items": []}}
+
+        if "/me" in url:
+            return {"id": "test_user_123", "display_name": "Test User"}
+
+        if "/playlists" in url and method == "POST":
+            if "/tracks" in url:
+                self.added_tracks.append({"url": url, "data": data})
+                return {"snapshot_id": "snapshot_123"}
+            else:
+                playlist_id = f"playlist_{len(self.created_playlists) + 1}"
+                payload = data if isinstance(data, dict) else {}
+                result = {
+                    "id": playlist_id,
+                    "name": payload.get("name", "Test Playlist"),
+                    "external_urls": {"spotify": f"https://open.spotify.com/playlist/{playlist_id}"},
+                }
+                self.created_playlists.append(result)
+                return result
+
+        return {}
+
+
+class TestSpotifyIntegration(unittest.TestCase):
+    """Test suite for Spotify track resolution and playlist creation."""
+
+    def setUp(self):
+        self.mock_http = MockSpotifyHTTPRequester()
+        self.client = SpotifyClient(
+            access_token="test_valid_access_token",
+            http_requester=self.mock_http,
+        )
+        self.profile = MoodProfile(
+            intensity=1,
+            core_emotion="Joy",
+            branch="Content",
+            specific_emotion="Peaceful",
+            code="J-1-1:1",
+            intensity_label="Crisis / Exhausted",
+        )
+
+    def test_missing_credentials_raises_auth_error(self):
+        empty_client = SpotifyClient(
+            client_id="",
+            client_secret="",
+            access_token="",
+            token_cache_path="nonexistent_cache.json",
+        )
+        with self.assertRaises(SpotifyAuthError) as ctx:
+            empty_client.authenticate()
+        self.assertIn("Spotify credentials not found", str(ctx.exception))
+
+    def test_search_track_found(self):
+        track = self.client.search_track("September", "Earth, Wind & Fire")
+        self.assertIsNotNone(track)
+        self.assertEqual(track.title, "September")
+        self.assertEqual(track.artist, "Earth, Wind & Fire")
+        self.assertEqual(track.spotify_uri, "spotify:track:september123")
+
+    def test_search_track_not_found(self):
+        track = self.client.search_track("Nonexistent Song", "Unknown Artist")
+        self.assertIsNone(track)
+
+    def test_resolve_songs_partial_success(self):
+        recs = [
+            SongRecommendation(title="September", artist="Earth, Wind & Fire"),
+            SongRecommendation(title="Unknown Fictional Song", artist="Nobody"),
+            SongRecommendation(title="Weightless", artist="Marconi Union"),
+        ]
+        resolved, unresolved = self.client.resolve_songs(recs)
+
+        self.assertEqual(len(resolved), 2)
+        self.assertEqual(len(unresolved), 1)
+
+        self.assertEqual(resolved[0].title, "September")
+        self.assertEqual(resolved[1].title, "Weightless")
+        self.assertEqual(unresolved[0].title, "Unknown Fictional Song")
+        self.assertIn("No match found on Spotify", unresolved[0].reason)
+
+    def test_create_playlist_success(self):
+        tracks = [
+            ResolvedTrack(
+                title="September",
+                artist="Earth, Wind & Fire",
+                spotify_uri="spotify:track:september123",
+                spotify_id="september123",
+            ),
+            ResolvedTrack(
+                title="Weightless",
+                artist="Marconi Union",
+                spotify_uri="spotify:track:weightless456",
+                spotify_id="weightless456",
+            ),
+        ]
+
+        result = self.client.create_playlist(profile=self.profile, tracks=tracks)
+
+        self.assertEqual(result.playlist_name, "Joy — Content — Peaceful")
+        self.assertEqual(result.playlist_id, "playlist_1")
+        self.assertEqual(result.success_count, 2)
+        self.assertEqual(result.total_recommendations, 2)
+        self.assertEqual(result.playlist_url, "https://open.spotify.com/playlist/playlist_1")
+
+        # Verify tracks were added to mock
+        self.assertEqual(len(self.mock_http.added_tracks), 1)
+        self.assertEqual(
+            self.mock_http.added_tracks[0]["data"]["uris"],
+            ["spotify:track:september123", "spotify:track:weightless456"],
+        )
+
+    def test_create_playlist_with_zero_tracks_raises_error(self):
+        with self.assertRaises(SpotifyError):
+            self.client.create_playlist(profile=self.profile, tracks=[])
+
+
+if __name__ == "__main__":
+    unittest.main()

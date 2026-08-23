@@ -1,4 +1,4 @@
-# Mood Profile & Prompt Generator
+# Mood Profile & Spotify Playlist Generator
 
 A reference implementation demonstrating **Context System Design (v0.1)**.
 
@@ -6,50 +6,49 @@ A reference implementation demonstrating **Context System Design (v0.1)**.
 
 ## Overview
 
-The **Mood Profile & Prompt Generator** is a lightweight, deterministic command-line application that:
+The **Mood Profile & Spotify Playlist Generator** creates personalized Spotify playlists by combining structured human emotional context with external AI song recommendations:
 
-1. Guides the user through the canonical mood taxonomy to capture their emotional state.
-2. Constructs a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
-3. Formats the profile into a **machine-readable song-recommendation prompt** based on configurable application settings.
-4. Displays the completed prompt for the user to copy into an external chatbot.
-
-> **Note on Implementation Scope:**
-> The application currently focuses on **Context Generation → Context Modeling → Prompt Assembly**. It requests structured, machine-readable output (`json`, `csv`, or `yaml`) from an external chatbot so that future stages can parse and consume the song list programmatically. The application itself does not yet parse chatbot responses, call LLMs, or integrate with Spotify.
+1. **Deterministic Mood Selection:** Guides the user through the canonical mood taxonomy to determine a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
+2. **Machine-Readable Prompt Generation:** Produces a structured prompt requesting song recommendations in `json`, `csv`, or `yaml` from an external chatbot.
+3. **Song List Ingestion:** Accepts and validates the machine-readable song recommendations from the chatbot (via interactive paste or file).
+4. **Deterministic Spotify Resolution & Playlist Creation:** Resolves candidate tracks against Spotify's catalog and creates a named Spotify playlist (e.g., `Joy — Excited — Energetic`) populated with all resolved tracks, reporting any unresolved songs clearly.
 
 ---
 
 ## Context System Design Lifecycle
 
 ```text
-Context Generation      User selects mood via the interactive CLI
+Context Generation      User selects mood via interactive CLI
         ↓
-Context Modeling        Application structures choices into a Mood Profile and code (e.g. J-3-1:8)
+Context Modeling        Application structures choices into a Mood Profile & code (e.g. J-3-1:8)
         ↓
-Context Validation      User reviews and confirms the mood profile
+Prompt Assembly         Static prompt template is populated with Mood Profile & config settings
         ↓
-Prompt Assembly         Static prompt template is populated with the structured mood profile,
-                        configured song count, and requested output format (from config.json)
+External AI Reasoning   External chatbot produces machine-readable song recommendations (JSON/CSV/YAML)
         ↓
-Final Output            Completed prompt is displayed for copying into an external chatbot
+Song Ingestion          Application parses and validates the structured song list
         ↓
-[Future Tasks]          Importing machine-readable song list & playlist generation
+External Validation     Application resolves song titles & artists against Spotify Web API
+        ↓
+Context Delivery        Application creates and populates the Spotify playlist
 ```
 
 ---
 
 ## Key Features
 
-* **Authoritative Human-in-the-Loop Selection:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
-* **Deterministic & Standalone:** Runs locally with zero external network or API dependencies.
-* **Machine-Readable Output Contracts:** Prompts instruct chatbots to return structured data in `json`, `csv`, or `yaml` with required `title` and `artist` fields and no conversational filler.
-* **Dedicated Configuration:** Settings like `song_count` and `output_format` are stored in [`config.json`](config.json).
+* **Authoritative Human Emotion:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
+* **External AI Bridge:** The application generates strict, machine-readable prompt contracts (`json`, `csv`, `yaml`) for external chatbots.
+* **Deterministic Track Resolution:** Searches Spotify using structured track and artist filters with fallback matching, avoiding hallucinated songs.
+* **Graceful Partial Failure Handling:** Successfully adds all resolved tracks while clearly listing any songs that could not be matched.
 * **Canonical Taxonomy:** Uses [`context/mood-taxonomy.json`](context/mood-taxonomy.json) as the single source of truth.
 
 ---
 
-## Configuration
+## Configuration & Environment Variables
 
-Application settings are managed in [`config.json`](config.json) at the root of the project:
+### Application Settings (`config.json`)
+Managed in [`config.json`](config.json) at the root of the project:
 
 ```json
 {
@@ -58,63 +57,55 @@ Application settings are managed in [`config.json`](config.json) at the root of 
 }
 ```
 
-### Supported Settings
+* `song_count`: Number of songs requested from the chatbot (default: `10`).
+* `output_format`: Machine-readable format requested: `"json"`, `"csv"`, or `"yaml"`.
 
-| Setting | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `song_count` | `int` | `10` | Positive integer specifying how many song recommendations to request. |
-| `output_format` | `string` | `"json"` | Output format requested from the chatbot: `"json"`, `"csv"`, or `"yaml"`. |
+### Spotify Authentication Setup
+To create Spotify playlists, set the following environment variables (or in a `.env` file):
 
-### Output Format Contracts
+```bash
+export SPOTIFY_CLIENT_ID="your_spotify_client_id"
+export SPOTIFY_CLIENT_SECRET="your_spotify_client_secret"
+export SPOTIFY_REDIRECT_URI="http://127.0.0.1:8888/callback" # (Default)
+```
 
-* **`json`**: Requests a JSON object with a `"songs"` array of objects having `"title"` and `"artist"` keys.
-* **`csv`**: Requests CSV data with a `title,artist` header row.
-* **`yaml`**: Requests YAML data with a `"songs"` list of items containing `title` and `artist`.
-
----
-
-## Mood Model & Taxonomy
-
-### Intensity Scale (1–10)
-Measures **emotional energy / activation**:
-* **1–2:** Crisis / Exhausted
-* **3–4:** Low / Uncomfortable
-* **5–6:** Neutral / Baseline
-* **7–8:** Positive / Stable
-* **9–10:** Peak State
-
-### Taxonomy Overview
-* **Joy [J]:** Content, Happy, Excited
-* **Sadness [S]:** Lonely, Vulnerable, Sluggish
-* **Anger [A]:** Irritated, Resentful, Furious
-* **Fear [F]:** Anxious, Scared, Insecure
-* **Disgust [D]:** Repelled, Disapproving
-* **Surprise [Su]:** Amazed, Confused
+Alternatively, you can provide an existing OAuth access token directly:
+```bash
+export SPOTIFY_ACCESS_TOKEN="your_oauth_access_token"
+```
 
 ---
 
 ## Usage
 
-### 1. Interactive CLI Mode
+### 1. Interactive CLI Mode (Full End-to-End Workflow)
 Run the interactive wizard:
 ```bash
 python3 main.py
 ```
 
-### 2. Direct Code Validation & Prompt Generation
-Generate a prompt directly from a mood code without interactive prompts:
+Workflow:
+1. Select Core Emotion, Branch, Specific Emotion, and Intensity.
+2. Review the Mood Profile and confirm to generate the chatbot prompt.
+3. Copy and submit the prompt to your chatbot (ChatGPT, Claude, Gemini, etc.).
+4. Choose `[I]mport` and paste the chatbot's structured response (or path to a saved file).
+5. The application resolves each track on Spotify, creates the playlist, and outputs the Spotify URL.
+
+### 2. Direct Command-Line & File Import
+Generate a playlist directly from a mood code and a saved song list file:
+```bash
+python3 main.py --code J-3-1:8 --import-songs path/to/songs.json
+```
+
+### 3. Prompt Only / Code Validation
+Generate a prompt without interactive prompts:
 ```bash
 python3 main.py --code J-3-1:8
 ```
 
-Output as structured JSON:
+Output mood profile as JSON:
 ```bash
 python3 main.py --code J-3-1:8 --json
-```
-
-### 3. Using a Custom Configuration File
-```bash
-python3 main.py --config path/to/custom_config.json
 ```
 
 ### 4. Display Full Taxonomy
@@ -140,16 +131,20 @@ python3 -m unittest discover -s tests
 ├── src/                       # Application source code
 │   ├── __init__.py
 │   ├── config.py              # Configuration loader and validator
-│   ├── models.py              # MoodProfile and taxonomy data models
+│   ├── models.py              # MoodProfile, SongRecommendation, ResolvedTrack models
 │   ├── taxonomy.py            # Taxonomy traversal, validation, and code parsing
-│   ├── prompt.py              # Machine-readable prompt templates and rendering
-│   ├── mood_selection.py      # Interactive CLI wizard
+│   ├── prompt.py              # Machine-readable prompt templates (JSON, CSV, YAML)
+│   ├── song_parser.py         # Ingestion and validation for JSON, CSV, and YAML song lists
+│   ├── spotify.py             # Spotify authentication, search resolution, and playlist creation
+│   ├── mood_selection.py      # Interactive CLI wizard and import coordinator
 │   └── cli.py                 # CLI argument parsing
 ├── tests/                     # Automated unit test suite
 │   ├── __init__.py
-│   ├── test_config.py         # Configuration loading and validation tests
+│   ├── test_config.py         # Configuration tests
 │   ├── test_taxonomy.py       # Taxonomy and code parsing tests
-│   ├── test_prompt.py         # Prompt template rendering tests (JSON, CSV, YAML)
+│   ├── test_prompt.py         # Prompt template rendering tests
+│   ├── test_song_parser.py    # Song list parsing and validation tests
+│   ├── test_spotify.py        # Spotify API and track resolution mock tests
 │   └── test_mood_selection.py # Interactive CLI flow tests
 ├── context/                   # Canonical domain context and schemas
 │   ├── mood-taxonomy.json     # Canonical mood taxonomy and intensity scales
@@ -164,5 +159,6 @@ python3 -m unittest discover -s tests
     ├── Task-002—Implement-Interactive-Mood-Selection-CLI.md
     ├── Task-003—Simplify-Application-to-Mood-Profile-Prompt-Generator.md
     ├── Task-004-Add-Application-Configuration.md
-    └── Task-005-Make-Recommendation-Output-Format-Configurable.md
+    ├── Task-005-Make-Recommendation-Output-Format-Configurable.md
+    └── Task-006-Import-Song-List-and-Create-Spotify-Playlist.md
 ```

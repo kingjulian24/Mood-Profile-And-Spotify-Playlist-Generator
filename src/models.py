@@ -1,9 +1,9 @@
-"""Data models for structured mood representation and taxonomy navigation."""
+"""Data models for structured mood representation, song parsing, and Spotify playlist generation."""
 
 from __future__ import annotations
 import json
-from dataclasses import dataclass
-from typing import Any, Dict, List
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,10 @@ class MoodProfile:
             f"Mood Code: {self.code}"
         )
 
+    def format_playlist_name(self) -> str:
+        """Generate a canonical Spotify playlist name based on the mood hierarchy."""
+        return f"{self.core_emotion} — {self.branch} — {self.specific_emotion}"
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the mood profile to a dictionary matching the schema."""
         return {
@@ -82,5 +86,59 @@ class MoodProfile:
         return json.dumps(self.to_dict(), indent=indent)
 
 
-# Alias for backward compatibility if needed
+# Alias for backward compatibility
 MoodSelection = MoodProfile
+
+
+@dataclass(frozen=True)
+class SongRecommendation:
+    """Represents a song recommendation parsed from external chatbot output."""
+    title: str
+    artist: str
+
+    def __post_init__(self):
+        if not self.title or not self.title.strip():
+            raise ValueError("Song title cannot be empty.")
+        if not self.artist or not self.artist.strip():
+            raise ValueError("Song artist cannot be empty.")
+
+
+@dataclass(frozen=True)
+class ResolvedTrack:
+    """Represents a song recommendation successfully resolved against the Spotify catalog."""
+    title: str
+    artist: str
+    spotify_uri: str
+    spotify_id: str
+    spotify_url: str = ""
+    album_name: str = ""
+
+
+@dataclass(frozen=True)
+class UnresolvedTrack:
+    """Represents a song recommendation that could not be resolved on Spotify."""
+    title: str
+    artist: str
+    reason: str
+
+
+@dataclass
+class PlaylistResult:
+    """Result of creating a Spotify playlist from resolved tracks."""
+    playlist_id: str
+    playlist_name: str
+    playlist_url: str
+    resolved_tracks: List[ResolvedTrack] = field(default_factory=list)
+    unresolved_tracks: List[UnresolvedTrack] = field(default_factory=list)
+
+    @property
+    def total_recommendations(self) -> int:
+        return len(self.resolved_tracks) + len(self.unresolved_tracks)
+
+    @property
+    def success_count(self) -> int:
+        return len(self.resolved_tracks)
+
+    @property
+    def unresolved_count(self) -> int:
+        return len(self.unresolved_tracks)

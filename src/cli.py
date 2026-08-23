@@ -1,33 +1,41 @@
-"""Main CLI entrypoint for Mood Profile & Prompt Generator."""
+"""Main CLI entrypoint for Mood Profile, Prompt Generator, and Spotify Playlist Creator."""
 
 from __future__ import annotations
 import argparse
 import sys
+from pathlib import Path
 from typing import Optional
 
 from src.config import ConfigError, load_config
 from src.models import MoodProfile
 from src.mood_selection import MoodSelectionCLI
 from src.prompt import generate_recommendation_prompt
+from src.spotify import SpotifyClient
 from src.taxonomy import MoodTaxonomy
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line argument parser."""
     parser = argparse.ArgumentParser(
-        description="Mood Profile & Prompt Generator — Deterministic Music Recommendation Prompt Builder",
+        description="Mood Profile & Prompt Generator — Deterministic Music Recommendation & Spotify Playlist Creator",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--code",
         type=str,
-        help="Directly generate a prompt from a mood code (e.g., 'J-3-1:8') without interactive prompts.",
+        help="Directly generate a prompt or playlist from a mood code (e.g., 'J-3-1:8') without interactive prompts.",
     )
     parser.add_argument(
         "--config",
         type=str,
         default=None,
         help="Path to custom configuration file (defaults to config.json).",
+    )
+    parser.add_argument(
+        "--import-songs",
+        type=str,
+        default=None,
+        help="Path to a file containing chatbot-generated song recommendations to import and create a Spotify playlist.",
     )
     parser.add_argument(
         "--json",
@@ -73,6 +81,7 @@ def main(args: Optional[list[str]] = None) -> int:
         return 0
 
     profile: Optional[MoodProfile] = None
+    cli = MoodSelectionCLI(taxonomy=taxonomy, config=config)
 
     if parsed_args.code:
         try:
@@ -89,8 +98,10 @@ def main(args: Optional[list[str]] = None) -> int:
         except Exception as e:
             print(f"Error parsing mood code '{parsed_args.code}': {e}", file=sys.stderr)
             return 1
+
+        if parsed_args.import_songs:
+            cli.process_song_import_and_playlist(profile, raw_song_data=parsed_args.import_songs)
     else:
-        cli = MoodSelectionCLI(taxonomy=taxonomy, config=config)
         result = cli.run()
         if result is None:
             return 1
