@@ -176,6 +176,64 @@ class TestAPIServerHandler(unittest.TestCase):
         self.assertFalse(data["valid"])
         self.assertIn("artist", data["error"].lower())
 
+    @patch("src.server.SpotifyClient")
+    def test_spotify_resolve_endpoint(self, mock_spotify_cls):
+        from src.models import ResolvedTrack, UnresolvedTrack
+        mock_client = mock_spotify_cls.return_value
+        mock_client.resolve_songs.return_value = (
+            [ResolvedTrack(title="September", artist="Earth, Wind & Fire", spotify_uri="spotify:track:123", spotify_id="123", spotify_url="http://spotify/123", album_name="Album")],
+            [UnresolvedTrack(title="Unknown", artist="Nobody", reason="No match found on Spotify")],
+        )
+
+        status, data = execute_request("POST", "/api/spotify/resolve", body={
+            "songs": [
+                {"title": "September", "artist": "Earth, Wind & Fire"},
+                {"title": "Unknown", "artist": "Nobody"},
+            ]
+        })
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(data["resolved_count"], 1)
+        self.assertEqual(len(data["resolved"]), 1)
+        self.assertEqual(len(data["unresolved"]), 1)
+
+    @patch("src.server.SpotifyClient")
+    def test_spotify_playlist_create_endpoint(self, mock_spotify_cls):
+        from src.models import PlaylistResult, ResolvedTrack
+        mock_client = mock_spotify_cls.return_value
+        mock_track = ResolvedTrack(
+            title="September",
+            artist="Earth, Wind & Fire",
+            spotify_uri="spotify:track:123",
+            spotify_id="123",
+        )
+        mock_client.create_playlist.return_value = PlaylistResult(
+            playlist_id="playlist_abc",
+            playlist_name="Joy — Excited — Energetic — Aug 24, 2026 12:00 AM",
+            playlist_url="https://open.spotify.com/playlist/playlist_abc",
+            resolved_tracks=[mock_track],
+        )
+
+        status, data = execute_request("POST", "/api/spotify/playlist", body={
+            "profile": {
+                "core_emotion": "Joy",
+                "branch": "Excited",
+                "specific_emotion": "Energetic",
+                "code": "J-3-1:8",
+                "intensity": 8,
+            },
+            "tracks": [
+                {
+                    "title": "September",
+                    "artist": "Earth, Wind & Fire",
+                    "spotify_uri": "spotify:track:123",
+                    "spotify_id": "123",
+                }
+            ]
+        })
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(data["playlist_id"], "playlist_abc")
+        self.assertEqual(data["tracks_added"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

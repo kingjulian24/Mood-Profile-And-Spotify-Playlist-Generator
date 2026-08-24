@@ -4,6 +4,7 @@ import { MoodSelection } from './components/MoodSelection';
 import { MoodProfileView } from './components/MoodProfileView';
 import { PromptView } from './components/PromptView';
 import { SongImport } from './components/SongImport';
+import { SpotifyPlaylist } from './components/SpotifyPlaylist';
 
 export function App() {
   const [backendStatus, setBackendStatus] = useState({
@@ -34,6 +35,10 @@ export function App() {
 
   // Imported Songs State
   const [parsedSongs, setParsedSongs] = useState(null);
+
+  // Spotify Resolution & Playlist States
+  const [resolutionResult, setResolutionResult] = useState(null);
+  const [playlistResult, setPlaylistResult] = useState(null);
 
   useEffect(() => {
     async function initApp() {
@@ -71,6 +76,8 @@ export function App() {
     setPromptData(null);
     setPromptError(null);
     setParsedSongs(null);
+    setResolutionResult(null);
+    setPlaylistResult(null);
   };
 
   const handleSelectCore = (coreName) => {
@@ -116,6 +123,8 @@ export function App() {
     setProfileError(null);
     setPromptData(null);
     setParsedSongs(null);
+    setResolutionResult(null);
+    setPlaylistResult(null);
 
     try {
       const generatedProfile = await api.generateProfile({
@@ -252,7 +261,7 @@ export function App() {
             {parsedSongs && (
               <span className="status-pill status-online">
                 <span className="status-dot"></span>
-                {parsedSongs.length} Songs Imported
+                {parsedSongs.length} Songs Validated
               </span>
             )}
           </div>
@@ -261,8 +270,16 @@ export function App() {
             config={config}
             promptData={promptData}
             parsedSongs={parsedSongs}
-            onSongsParsed={(songs) => setParsedSongs(songs)}
-            onClearSongs={() => setParsedSongs(null)}
+            onSongsParsed={(songs) => {
+              setParsedSongs(songs);
+              setResolutionResult(null);
+              setPlaylistResult(null);
+            }}
+            onClearSongs={() => {
+              setParsedSongs(null);
+              setResolutionResult(null);
+              setPlaylistResult(null);
+            }}
             disabled={!promptData}
           />
         </section>
@@ -274,10 +291,23 @@ export function App() {
               <span className="card-step-badge">Step 5</span>
               <h2 className="card-title">Spotify Playlist</h2>
             </div>
+            {playlistResult && (
+              <span className="status-pill status-online">
+                <span className="status-dot"></span>
+                Playlist Ready
+              </span>
+            )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Deterministic track resolution and Spotify playlist creation.
-          </p>
+
+          <SpotifyPlaylist
+            profile={profile}
+            parsedSongs={parsedSongs}
+            resolutionResult={resolutionResult}
+            onResolutionDone={(res) => setResolutionResult(res)}
+            playlistResult={playlistResult}
+            onPlaylistCreated={(res) => setPlaylistResult(res)}
+            disabled={!parsedSongs || parsedSongs.length === 0}
+          />
         </section>
       </main>
 

@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from src.config import ConfigError, load_config
-from src.models import MoodProfile, SongRecommendation
+from src.models import MoodProfile, PlaylistResult, ResolvedTrack, SongRecommendation, UnresolvedTrack
 from src.prompt import generate_recommendation_prompt
 from src.song_parser import SongParseError, parse_song_list
 from src.spotify import SpotifyClient, SpotifyError
