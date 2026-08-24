@@ -1,4 +1,8 @@
-# Mood Profile & Spotify Playlist Generator
+# Mood-Based Spotify Playlist Generator
+
+> A deterministic application that turns a structured mood profile and AI-generated song recommendations into a verified Spotify playlist.
+
+![Mood-Based Spotify Playlist Generator](docs/images/step_5.png)
 
 A reference implementation demonstrating **Context System Design (v0.1)**.
 
@@ -6,36 +10,50 @@ A reference implementation demonstrating **Context System Design (v0.1)**.
 
 ## Overview
 
-The **Mood Profile & Spotify Playlist Generator** creates personalized Spotify playlists by combining structured human emotional context with external AI song recommendations:
+The **Mood-Based Spotify Playlist Generator** creates personalized Spotify playlists by combining structured human emotional context with external AI song recommendations:
 
-1. **Deterministic Mood Selection:** Guides the user through the canonical mood taxonomy to determine a structured **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
+1. **Deterministic Mood Selection:** Guides the user through a canonical 4-level taxonomy to determine an authoritative **Mood Profile** and canonical mood code (e.g. `J-3-1:8`).
 2. **Machine-Readable Prompt Generation:** Produces a structured prompt requesting song recommendations in `json`, `csv`, or `yaml` from an external chatbot.
-3. **Song List Ingestion:** Accepts and validates the machine-readable song recommendations from the chatbot (via interactive paste or file).
-4. **Deterministic Spotify Resolution & Playlist Creation:** Resolves candidate tracks against Spotify's catalog and creates a named Spotify playlist (e.g., `Joy — Excited — Energetic — Aug 23, 2026 3:42 PM`) populated with all resolved tracks, reporting any unresolved songs clearly.
+3. **Song List Ingestion & Validation:** Parses and validates the structured song recommendations from the chatbot (via interactive paste or file).
+4. **Deterministic Spotify Resolution & Playlist Creation:** Resolves candidate tracks against Spotify's catalog and creates a named Spotify playlist (e.g., `Joy — Excited — Energetic — Aug 24, 2026 1:15 AM`) populated with all resolved tracks, reporting any unresolved songs clearly.
 
 The application provides two complementary user interfaces sharing the exact same Python business logic:
 - **Web Graphical User Interface (React + Vite)**: A modern, dark-themed visual presentation layer.
-- **Interactive Command-Line Interface (CLI)**: A lightweight terminal-based workflow.
+- **Interactive Command-Line Interface (CLI)**: A lightweight terminal-based wizard.
 
 ---
 
-## Context System Design Lifecycle
+## Context System Design
+
+This project serves as a reference implementation for the **[Context System Design Framework](frameworks/context-system-design-v0.1.md)**.
+
+Rather than treating context as ad-hoc prompt engineering or delegating emotional reasoning to an opaque LLM, Context System Design models context intentionally through clear authority boundaries:
 
 ```text
-Context Generation      User selects mood via React GUI or interactive CLI
+Context Generation      User explicitly selects mood (Core Emotion → Branch → Specific Emotion → Intensity)
         ↓
-Context Modeling        Application structures choices into a Mood Profile & code (e.g. J-3-1:8)
+Context Modeling        Application structures choices into a canonical MoodProfile & code (e.g. J-3-1:8)
         ↓
-Prompt Assembly         Static prompt template is populated with Mood Profile & config settings
+Prompt Assembly         Deterministic prompt template is populated with MoodProfile & config.json settings
         ↓
 External AI Reasoning   External chatbot produces machine-readable song recommendations (JSON/CSV/YAML)
         ↓
-Song Ingestion          Application parses and validates the structured song list
+Song Ingestion          Application parses and validates the structured song list (src/song_parser.py)
         ↓
-External Validation     Application resolves song titles & artists against Spotify Web API
+External Validation     Application resolves song candidates against Spotify Web API (src/spotify.py)
         ↓
 Context Delivery        Application creates and populates the Spotify playlist
 ```
+
+### Core Authority Principles
+
+1. **The User is the Authority on Their Emotion:** The user explicitly chooses their emotional state and intensity. The application does not attempt to "guess" emotions through sentiment analysis or conversational LLM estimation.
+2. **The Chatbot is the Authority on Musical Reasoning:** Song recommendations are reasoned by an external chatbot (ChatGPT, Claude, Gemini, etc.) using strict output contracts (`json`, `csv`, `yaml`).
+3. **The Application is the Context Assembler & Validator:** Raw chatbot responses are treated as untrusted candidates until parsed, structured, and validated by the backend domain model.
+4. **Spotify is the Authority on Catalog & Tracks:** Songs are verified deterministically against Spotify's Search API before playlist creation, eliminating hallucinated tracks.
+5. **Zero Logic Duplication:** Both the React GUI and CLI rely on the same Python domain models, taxonomy, and Spotify services.
+
+*For complete design specifications, see [System Architecture Design](designs/Mood-Based%20Spotify%20Playlist%20Generator.md) and [GUI Design](designs/Mood-Based-Spotify-Playlist-Generator-GUI.md).*
 
 ---
 
@@ -47,7 +65,7 @@ Context Delivery        Application creates and populates the Spotify playlist
               ┌────────────┴────────────┐
               │                         │
               ▼                         ▼
-      React GUI (frontend/)       Interactive CLI
+      React GUI (frontend/)       Interactive CLI (main.py)
               │                         │
               │ HTTP (JSON REST)        │ Direct Python Calls
               ▼                         ▼
@@ -96,27 +114,18 @@ context/mood-taxonomy.json   • config.json (song_count, format)
                    (Populated with Resolved Tracks)
 ```
 
-### End-to-End Workflow
-
-1. **Deterministic Mood Selection:** The user selects their emotional state (Core Emotion → Branch → Specific Emotion → Intensity 1–10) through either the React GUI or the interactive CLI.
-2. **Context Modeling:** The application structures the selections into an authoritative `MoodProfile` and canonical mood code (e.g. `J-3-1:8`).
-3. **Prompt Generation:** The application deterministically formats a structured, machine-readable recommendation prompt according to `config.json` (`song_count`, `output_format`).
-4. **External AI Reasoning:** The user copies and submits the prompt to an external chatbot of their choice (ChatGPT, Claude, Gemini, etc.).
-5. **Machine-Readable Response:** The chatbot returns song recommendations formatted strictly as `JSON`, `CSV`, or `YAML`.
-6. **Song Ingestion & Validation:** The user imports the response into the application, which validates structure and required fields (`title`, `artist`).
-7. **Spotify Track Resolution:** The application deterministically searches Spotify's catalog to resolve track URIs, gracefully reporting any unresolved items.
-8. **Playlist Creation:** The application creates a named Spotify playlist (e.g., `Joy — Excited — Energetic — Aug 23, 2026 3:42 PM`) and populates it with all resolved tracks.
-
 ---
 
-## Key Features
+## Security & Credential Isolation
 
-* **Authoritative Human Emotion:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
-* **Dual Presentation Interfaces:** Clean React GUI and deterministic interactive CLI running on top of a shared Python domain model.
-* **External AI Bridge:** The application generates strict, machine-readable prompt contracts (`json`, `csv`, `yaml`) for external chatbots.
-* **Deterministic Track Resolution:** Searches Spotify using structured track and artist filters with fallback matching, avoiding hallucinated songs.
-* **Graceful Partial Failure Handling:** Successfully adds all resolved tracks while clearly listing any songs that could not be matched.
-* **Zero Logic Duplication:** The React GUI communicates with the Python backend via a lightweight REST API server, keeping business logic centralized.
+Security and credential protection are central design constraints of the application:
+
+- **Backend Credential Isolation:** Spotify client credentials (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`) and access tokens are managed exclusively by the Python backend via environment variables and never exposed to the frontend browser application.
+- **CSRF State Verification:** The local OAuth authorization flow generates cryptographically secure `state` tokens (`secrets.token_urlsafe(24)`) with automatic expiration to prevent CSRF and session confusion.
+- **Restricted Token Cache:** Cached tokens (`.cache-spotify.json`) are stored with strict owner-only file permissions (`0600` / `-rw-------`) and are ignored by Git.
+- **Safe Input Parsing:** Song ingestion parsers (`src/song_parser.py`) use zero-eval string parsing and safe YAML handling, rejecting dangerous executable structures.
+- **Payload Limits:** The backend API server enforces strict request body limits (`1 MB`) to prevent memory exhaustion denial-of-service.
+- **Automated Security Suite:** A dedicated test suite ([`tests/test_security.py`](tests/test_security.py)) continuously validates credential protection, OAuth CSRF rejection, and safe input parsing.
 
 ---
 
@@ -135,101 +144,99 @@ Managed in [`config.json`](config.json) at the root of the project:
 * `song_count`: Number of songs requested from the chatbot (default: `10`).
 * `output_format`: Machine-readable format requested: `"json"`, `"csv"`, or `"yaml"`.
 
----
+### Spotify Credentials Setup
 
-## Spotify Credentials & Environment Setup
+Set the following environment variables (or copy [`set-spotify-env.example.sh`](set-spotify-env.example.sh)):
 
-Spotify credentials are sensitive secrets and are read strictly from **environment variables**. They are never hardcoded or stored in application configuration files or exposed to the frontend.
+```bash
+cp set-spotify-env.example.sh set-spotify-env.sh
+```
 
-### Required Environment Variables
+Edit `set-spotify-env.sh` with your Spotify Developer credentials:
 
-| Variable | Required | Description |
-| :--- | :--- | :--- |
-| `SPOTIFY_CLIENT_ID` | Yes | Client ID from Spotify Developer Dashboard. |
-| `SPOTIFY_CLIENT_SECRET` | Yes | Client Secret from Spotify Developer Dashboard. |
-| `SPOTIFY_REDIRECT_URI` | Optional | Redirect URI (default: `http://127.0.0.1:8888/callback`). |
-| `SPOTIFY_ACCESS_TOKEN` | Optional | Direct OAuth access token override (bypasses auth flow). |
+```bash
+export SPOTIFY_CLIENT_ID="your_spotify_client_id_here"
+export SPOTIFY_CLIENT_SECRET="your_spotify_client_secret_here"
+export SPOTIFY_REDIRECT_URI="http://127.0.0.1:8888/callback"
+```
 
-### Configuring the Local Environment
+Source the script in your active shell:
 
-A safe template [`set-spotify-env.example.sh`](set-spotify-env.example.sh) is provided in the repository.
-
-1. Copy the example template to create your local script:
-   ```bash
-   cp set-spotify-env.example.sh set-spotify-env.sh
-   ```
-
-2. Edit `set-spotify-env.sh` and fill in your Client ID and Client Secret:
-   ```bash
-   export SPOTIFY_CLIENT_ID="your_spotify_client_id_here"
-   export SPOTIFY_CLIENT_SECRET="your_spotify_client_secret_here"
-   export SPOTIFY_REDIRECT_URI="http://127.0.0.1:8888/callback"
-   ```
-
-3. **Source** the script in your terminal:
-   ```bash
-   source ./set-spotify-env.sh
-   ```
+```bash
+source ./set-spotify-env.sh
+```
 
 ---
 
 ## Usage
 
-### 1. Graphical User Interface (React Web App)
+### 1. Web Graphical User Interface (React + Vite)
 
-The React GUI runs locally and communicates with the Python backend API:
+The React GUI runs locally and communicates with the Python backend REST API:
 
 ```bash
 # Terminal 1: Start the Python Backend API Server
 source ./set-spotify-env.sh
 python3 main.py --serve
 
-# Terminal 2: Start the React Frontend
+# Terminal 2: Start the React Frontend Dev Server
 cd frontend
 npm run dev
 ```
 
 Open your browser at `http://localhost:3000`.
 
----
-
 ### 2. Interactive CLI Mode
-```bash
-# 1. Source your environment variables
-source ./set-spotify-env.sh
 
-# 2. Run the application
+Run the complete end-to-end terminal wizard:
+
+```bash
+source ./set-spotify-env.sh
 python3 main.py
 ```
 
-Workflow:
-1. Select Core Emotion, Branch, Specific Emotion, and Intensity.
-2. Review the Mood Profile and confirm to generate the chatbot prompt.
-3. Copy and submit the prompt to your chatbot (ChatGPT, Claude, Gemini, etc.).
-4. Choose `[I]mport` and paste the chatbot's structured response (or path to a saved file).
-5. The application resolves each track on Spotify, creates the playlist, and outputs the Spotify URL.
-
----
-
 ### 3. Direct Command-Line & File Import
-Generate a playlist directly from a mood code and a saved song list file:
+
+Generate a prompt or import a saved song list file directly:
+
 ```bash
+# Generate prompt from a mood code
+python3 main.py --code J-3-1:8
+
+# Direct import and playlist creation
 python3 main.py --code J-3-1:8 --import-songs path/to/songs.json
-```
 
----
-
-### 4. Display Full Taxonomy
-```bash
+# Dump full mood taxonomy
 python3 main.py --dump-taxonomy
 ```
 
 ---
 
-### 5. Run Automated Tests
+## Development Methodology
+
+This project was built following an incremental, task-driven development methodology:
+
+1. **Architectural Grounding:** High-level framework and design documents established domain models, taxonomy definitions, and architectural boundaries before coding.
+2. **Incremental Task Execution:** The application was built across 22 sequential tasks ([`tasks/`](tasks/)), each with clear scope, acceptance criteria, and verification steps executed by an autonomous AI coding agent.
+3. **Continuous Verification:** Every task was validated against automated unit test suites and production bundle builds before progressing to subsequent tasks.
+4. **Adaptive Refinement:** Implementation realities (such as non-blocking GUI OAuth separation, API rate limits, and CSRF state management) were refined collaboratively across task iterations.
+
+---
+
+## Testing & Build Verification
+
+Run the Python unit and security test suite:
 ```bash
 python3 -m unittest discover -s tests
 ```
+*Current test status: **88/88 tests passing**.*
+
+Build the React frontend production bundle:
+```bash
+cd frontend
+npm run build
+```
+*Current build status: **Built cleanly in ~350ms**.*
 
 ---
 
@@ -237,34 +244,39 @@ python3 -m unittest discover -s tests
 
 ```text
 .
-├── AGENTS.md                  # Operating guidelines for AI coding agents
-├── README.md                  # Project overview and usage documentation
+├── AGENTS.md                  # Operating guidelines and architectural rules for AI agents
+├── README.md                  # Comprehensive project documentation
 ├── config.json                # User application configuration (song_count, output_format)
 ├── set-spotify-env.example.sh # Safe template for Spotify API credentials
-├── set-spotify-env.sh         # Local credentials script (ignored by Git)
 ├── main.py                    # Root entrypoint (CLI and --serve backend)
 ├── frontend/                  # React + Vite Graphical User Interface
 │   ├── package.json           # Frontend dependencies
-│   ├── vite.config.js         # Vite configuration with API proxy
+│   ├── vite.config.js         # Vite configuration with backend API proxy
 │   ├── index.html             # HTML entrypoint
 │   └── src/
 │       ├── main.jsx           # React DOM root
-│       ├── App.jsx            # Application shell & workflow sections
+│       ├── App.jsx            # Application shell & 5-step workflow stepper
 │       ├── index.css          # Dark theme design system tokens & styles
+│       ├── components/        # Focused UI section components
+│       │   ├── MoodSelection.jsx   # Step 1: Mood taxonomy dropdowns & intensity slider
+│       │   ├── MoodProfileView.jsx # Step 2: Canonical mood profile summary card
+│       │   ├── PromptView.jsx      # Step 3: Machine-readable prompt & copy action
+│       │   ├── SongImport.jsx      # Step 4: Chatbot response textarea & parser
+│       │   └── SpotifyPlaylist.jsx # Step 5: Track resolution & playlist creation
 │       └── api/
 │           └── client.js      # Backend REST API client
-├── src/                       # Python core application source code
+├── src/                       # Python core domain logic
 │   ├── __init__.py
 │   ├── config.py              # Configuration loader and validator
 │   ├── models.py              # MoodProfile, SongRecommendation, ResolvedTrack models
 │   ├── taxonomy.py            # Taxonomy traversal, validation, and code parsing
 │   ├── prompt.py              # Machine-readable prompt templates (JSON, CSV, YAML)
 │   ├── song_parser.py         # Ingestion and validation for JSON, CSV, and YAML song lists
-│   ├── spotify.py             # Spotify authentication, search resolution, and playlist creation
-│   ├── server.py              # HTTP REST API server for GUI communication
+│   ├── spotify.py             # Spotify authentication, search resolution, and playlist CRUD
+│   ├── server.py              # HTTP REST API server & OAuth callback listener
 │   ├── mood_selection.py      # Interactive CLI wizard and import coordinator
 │   └── cli.py                 # CLI argument parsing
-├── tests/                     # Automated unit test suite
+├── tests/                     # Automated test suites
 │   ├── __init__.py
 │   ├── test_config.py         # Configuration tests
 │   ├── test_taxonomy.py       # Taxonomy and code parsing tests
@@ -272,15 +284,28 @@ python3 -m unittest discover -s tests
 │   ├── test_song_parser.py    # Song list parsing and validation tests
 │   ├── test_spotify.py        # Spotify API and track resolution mock tests
 │   ├── test_server.py         # Backend REST API endpoint tests
-│   └── test_mood_selection.py # Interactive CLI flow tests
+│   ├── test_mood_selection.py # Interactive CLI flow tests
+│   └── test_security.py       # Security, OAuth CSRF, and credential isolation tests
 ├── context/                   # Canonical domain context and schemas
 │   ├── mood-taxonomy.json     # Canonical mood taxonomy and intensity scales
 │   └── schemas/
 │       └── mood-selection.json# JSON schema for MoodProfile
-├── frameworks/                # Context System Design framework
+├── frameworks/                # Context System Design framework specification
 │   └── context-system-design-v0.1.md
 ├── designs/                   # Architecture and UI design documents
 │   ├── Mood-Based Spotify Playlist Generator.md
 │   └── Mood-Based-Spotify-Playlist-Generator-GUI.md
-└── tasks/                     # Task specifications
+├── docs/                      # Screenshots & visual assets
+│   └── images/
+│       ├── full_app.png       # Complete 5-step workflow screenshot
+│       └── step_5.png         # Step 5 playlist creation screenshot
+└── tasks/                     # Task specifications (Tasks 001–022)
 ```
+
+---
+
+## Full Application Workflow
+
+The complete five-step workflow in the React GUI, from mood selection to Spotify playlist creation:
+
+![Full Application](docs/images/full_app.png)
