@@ -234,6 +234,50 @@ class TestAPIServerHandler(unittest.TestCase):
         self.assertEqual(data["playlist_id"], "playlist_abc")
         self.assertEqual(data["tracks_added"], 1)
 
+    @patch("src.server.SpotifyClient")
+    def test_spotify_auth_start_endpoint(self, mock_spotify_cls):
+        mock_client = mock_spotify_cls.return_value
+        mock_client.get_authorize_url.return_value = "https://accounts.spotify.com/authorize?client_id=test"
+        mock_client.redirect_uri = "http://127.0.0.1:8888/callback"
+
+        status, data = execute_request("GET", "/api/spotify/auth/start")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertIn("https://accounts.spotify.com/authorize", data["auth_url"])
+
+    @patch("src.server.SpotifyClient")
+    def test_spotify_auth_disconnect_endpoint(self, mock_spotify_cls):
+        mock_client = mock_spotify_cls.return_value
+        status, data = execute_request("POST", "/api/spotify/auth/disconnect")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertTrue(data["success"])
+        mock_client.disconnect.assert_called_once()
+
+    @patch("src.server.SpotifyClient")
+    def test_spotify_status_endpoint_authenticated(self, mock_spotify_cls):
+        mock_client = mock_spotify_cls.return_value
+        mock_client.validate_cached_token.return_value = True
+        mock_client.user_profile = {
+            "id": "test_user_456",
+            "display_name": "Test Account",
+        }
+        mock_client.get_current_user_profile.return_value = mock_client.user_profile
+        status, data = execute_request("GET", "/api/spotify/status")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertTrue(data["authenticated"])
+        self.assertEqual(data["display_name"], "Test Account")
+        self.assertEqual(data["user_id"], "test_user_456")
+
+    @patch("src.server.SpotifyClient")
+    def test_spotify_status_endpoint_unauthenticated(self, mock_spotify_cls):
+        mock_client = mock_spotify_cls.return_value
+        mock_client.validate_cached_token.return_value = False
+        mock_client.user_profile = None
+        status, data = execute_request("GET", "/api/spotify/status")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertFalse(data["authenticated"])
+        self.assertIsNone(data["display_name"])
+        self.assertIsNone(data["user_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

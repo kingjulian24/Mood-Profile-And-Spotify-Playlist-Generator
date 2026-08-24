@@ -225,50 +225,61 @@ class SpotifyClient:
 
     def get_current_user_profile(self) -> Dict[str, Any]:
         """Fetch current authenticated user profile from Spotify."""
-        resp = self._http_request(f"{SPOTIFY_API_BASE}/me", headers=self._get_auth_headers())
+        if not self.access_token:
+            if not self.validate_cached_token():
+                raise SpotifyAuthError("No valid Spotify access token available.")
+        resp = self._http_request(
+            f"{SPOTIFY_API_BASE}/me",
+            headers={"Authorization": f"Bearer {self.access_token}"},
+        )
         self.user_profile = resp
         return resp
 
-    def authenticate(self) -> None:
+    def validate_cached_token(self) -> bool:
         """
-        Authenticate with Spotify using available credentials or cached tokens.
-        Validates access and displays active user profile diagnostics.
+        Non-interactively check, validate, and refresh cached Spotify tokens.
+        Returns True if a valid authenticated session exists, False otherwise.
+        Never prompts terminal input.
         """
-        # Step 1: Check existing access token or load cache
         if not self.access_token:
-            self._load_cached_token()
+            if not self._load_cached_token():
+                return False
 
-        # Step 2: Validate token if present
-        if self.access_token:
-            try:
-                profile = self.get_current_user_profile()
-                user_id = profile.get("id", "Unknown")
-                display_name = profile.get("display_name") or user_id
-                self._print(f"[✓] Authenticated with Spotify as: {display_name} (User ID: {user_id})")
-                return
-            except SpotifyError as e:
-                # Attempt refresh
-                if self.refresh_access_token():
-                    try:
-                        profile = self.get_current_user_profile()
-                        user_id = profile.get("id", "Unknown")
-                        display_name = profile.get("display_name") or user_id
-                        self._print(f"[✓] Authenticated with Spotify as: {display_name} (User ID: {user_id})")
-                        return
-                    except Exception:
-                        pass
-                self._clear_cached_token()
-                self.access_token = ""
-
-        # Step 3: Run OAuth Authorization Code Flow
-        if not self.client_id or not self.client_secret:
-            raise SpotifyAuthError(
-                "Spotify credentials not found.\n"
-                "Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables, "
-                "or provide SPOTIFY_ACCESS_TOKEN.\n"
-                "See README.md for Spotify developer setup instructions."
+        try:
+            resp = self._http_request(
+                f"{SPOTIFY_API_BASE}/me",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                retry_on_401=False,
             )
+            self.user_profile = resp
+            return True
+        except SpotifyError:
+            if self.refresh_access_token():
+                try:
+                    resp = self._http_request(
+                        f"{SPOTIFY_API_BASE}/me",
+                        headers={"Authorization": f"Bearer {self.access_token}"},
+                        retry_on_401=False,
+                    )
+                    self.user_profile = resp
+                    return True
+                except Exception:
+                    pass
+            self._clear_cached_token()
+            self.access_token = ""
+            self.user_profile = None
+            return False
 
+    def is_authenticated(self) -> bool:
+        """Return True if active token is valid."""
+        return self.validate_cached_token()
+
+    def get_authorize_url(self) -> str:
+        """Construct the Spotify OAuth authorization URL."""
+        if not self.client_id:
+            raise SpotifyAuthError(
+                "Spotify Client ID not configured. Please set SPOTIFY_CLIENT_ID in your environment."
+            )
         params = {
             "client_id": self.client_id,
             "response_type": "code",
@@ -276,26 +287,19 @@ class SpotifyClient:
             "scope": DEFAULT_SCOPE,
             "show_dialog": "true",
         }
-        auth_url = f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
+        return f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
-        self._print("\n" + "=" * 60)
-        self._print("               SPOTIFY AUTHENTICATION")
-        self._print("=" * 60)
-        self._print("To authenticate with Spotify, open the following URL in your browser:\n")
-        self._print(f"  {auth_url}\n")
-        self._print("After authorizing, you will be redirected to your redirect URI.")
-        self._print("Copy the full redirect URL (or authorization code) from your browser and paste it below.")
-        self._print("=" * 60)
+    def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+        """Exchange an authorization code for access tokens, update cache, and return user profile."""
+        if not self.client_id or not self.client_secret:
+            raise SpotifyAuthError(
+                "Spotify credentials not found. Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."
+            )
 
-        redirect_input = self._input("\nEnter redirect URL or code: ").strip()
-        if not redirect_input:
-            raise SpotifyAuthError("No authorization code provided.")
+        cleaned_code = extract_code_from_input(code)
+        if not cleaned_code:
+            raise SpotifyAuthError("Invalid authorization code provided.")
 
-        code = extract_code_from_input(redirect_input)
-        if not code:
-            raise SpotifyAuthError("Failed to extract authorization code from input.")
-
-        # Exchange code for tokens
         auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("utf-8")
         headers = {
             "Authorization": f"Basic {auth_header}",
@@ -303,7 +307,7 @@ class SpotifyClient:
         }
         data = urllib.parse.urlencode({
             "grant_type": "authorization_code",
-            "code": code,
+            "code": cleaned_code,
             "redirect_uri": self.redirect_uri,
         })
 
@@ -321,20 +325,65 @@ class SpotifyClient:
             raise SpotifyAuthError("Failed to obtain access token from Spotify.")
 
         self._save_cached_token(token_resp)
+        profile = self.get_current_user_profile()
+        return profile
 
-        # Retrieve and log active user diagnostics
-        try:
-            profile = self.get_current_user_profile()
-            user_id = profile.get("id", "Unknown")
-            display_name = profile.get("display_name") or user_id
-            self._print(f"[✓] Spotify authentication successful: {display_name} (User ID: {user_id})\n")
-        except Exception:
-            self._print("[✓] Spotify authentication successful.\n")
+    def disconnect(self) -> None:
+        """Clear cached tokens and reset in-memory authentication state."""
+        self._clear_cached_token()
+        self.access_token = ""
+        self.refresh_token = None
+        self.user_profile = None
+
+    def authenticate(self, interactive: bool = True) -> None:
+        """
+        Authenticate with Spotify.
+        If interactive=True (CLI), prompts user in terminal if no cached session exists.
+        If interactive=False, raises SpotifyAuthError if not authenticated.
+        """
+        if self.validate_cached_token():
+            user_id = (self.user_profile or {}).get("id", "Unknown")
+            display_name = (self.user_profile or {}).get("display_name") or user_id
+            self._print(f"[✓] Authenticated with Spotify as: {display_name} (User ID: {user_id})")
+            return
+
+        if not interactive:
+            raise SpotifyAuthError("Spotify authentication required. Please connect your Spotify account.")
+
+        # CLI Interactive Flow
+        if not self.client_id or not self.client_secret:
+            raise SpotifyAuthError(
+                "Spotify credentials not found.\n"
+                "Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables, "
+                "or provide SPOTIFY_ACCESS_TOKEN.\n"
+                "See README.md for Spotify developer setup instructions."
+            )
+
+        auth_url = self.get_authorize_url()
+
+        self._print("\n" + "=" * 60)
+        self._print("               SPOTIFY AUTHENTICATION")
+        self._print("=" * 60)
+        self._print("To authenticate with Spotify, open the following URL in your browser:\n")
+        self._print(f"  {auth_url}\n")
+        self._print("After authorizing, you will be redirected to your redirect URI.")
+        self._print("Copy the full redirect URL (or authorization code) from your browser and paste it below.")
+        self._print("=" * 60)
+
+        redirect_input = self._input("\nEnter redirect URL or code: ").strip()
+        if not redirect_input:
+            raise SpotifyAuthError("No authorization code provided.")
+
+        profile = self.exchange_code_for_token(redirect_input)
+        user_id = profile.get("id", "Unknown")
+        display_name = profile.get("display_name") or user_id
+        self._print(f"[✓] Spotify authentication successful: {display_name} (User ID: {user_id})\n")
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """Return Authorization headers."""
         if not self.access_token:
-            self.authenticate()
+            if not self.validate_cached_token():
+                raise SpotifyAuthError("Spotify authentication required. Please connect your Spotify account.")
         return {"Authorization": f"Bearer {self.access_token}"}
 
     def search_track(self, title: str, artist: str) -> Optional[ResolvedTrack]:

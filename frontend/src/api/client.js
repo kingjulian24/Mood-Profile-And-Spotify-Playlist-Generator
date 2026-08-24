@@ -57,6 +57,11 @@ export const api = {
 
   // Spotify Operations
   getSpotifyStatus: () => request('/spotify/status'),
+  startSpotifyAuth: () => request('/spotify/auth/start'),
+  disconnectSpotify: () =>
+    request('/spotify/auth/disconnect', {
+      method: 'POST',
+    }),
 
   resolveTracks: (songs) =>
     request('/spotify/resolve', {

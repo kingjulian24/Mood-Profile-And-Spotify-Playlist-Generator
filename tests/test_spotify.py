@@ -273,6 +273,78 @@ class TestSpotifyIntegration(unittest.TestCase):
         with self.assertRaises(SpotifyError):
             self.client.create_playlist(profile=self.profile, tracks=[])
 
+    def test_get_authorize_url(self):
+        client = SpotifyClient(client_id="test_client_123", client_secret="secret", redirect_uri="http://127.0.0.1:8888/callback")
+        url = client.get_authorize_url()
+        self.assertIn("client_id=test_client_123", url)
+        self.assertIn("redirect_uri=http%3A%2F%2F127.0.0.1%3A8888%2Fcallback", url)
+        self.assertIn("response_type=code", url)
+
+    def test_get_authorize_url_missing_id(self):
+        client = SpotifyClient(client_id="", client_secret="")
+        with self.assertRaises(SpotifyAuthError):
+            client.get_authorize_url()
+
+    def test_exchange_code_for_token_and_disconnect(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+
+        try:
+            client = SpotifyClient(
+                client_id="client_id_val",
+                client_secret="client_secret_val",
+                token_cache_path=tmp_path,
+                http_requester=self.mock_http,
+            )
+            profile = client.exchange_code_for_token("auth_code_123")
+            self.assertEqual(profile["id"], "test_user_123")
+            self.assertEqual(client.access_token, "mock_generated_access_token_789")
+            self.assertTrue(tmp_path.exists())
+
+            # Test disconnect
+            client.disconnect()
+            self.assertEqual(client.access_token, "")
+            self.assertFalse(tmp_path.exists())
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def test_validate_cached_token_never_calls_input(self):
+        input_called = False
+
+        def fake_input(prompt=""):
+            nonlocal input_called
+            input_called = True
+            return ""
+
+        client = SpotifyClient(
+            client_id="id",
+            client_secret="secret",
+            token_cache_path="/tmp/non_existent_cache_123.json",
+            input_func=fake_input,
+        )
+        is_auth = client.validate_cached_token()
+        self.assertFalse(is_auth)
+        self.assertFalse(input_called)
+
+    def test_authenticate_non_interactive_never_calls_input(self):
+        input_called = False
+
+        def fake_input(prompt=""):
+            nonlocal input_called
+            input_called = True
+            return ""
+
+        client = SpotifyClient(
+            client_id="id",
+            client_secret="secret",
+            token_cache_path="/tmp/non_existent_cache_123.json",
+            input_func=fake_input,
+        )
+        with self.assertRaises(SpotifyAuthError):
+            client.authenticate(interactive=False)
+        self.assertFalse(input_called)
+
 
 if __name__ == "__main__":
     unittest.main()

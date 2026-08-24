@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
@@ -123,25 +124,37 @@ class APIServerHandler(BaseHTTPRequestHandler):
         if path == "/api/spotify/status":
             try:
                 spotify = SpotifyClient()
-                is_auth = False
+                is_auth = spotify.validate_cached_token()
                 user_info = None
-                try:
-                    spotify.authenticate()
-                    profile = spotify.get_current_user_profile()
-                    is_auth = True
+                display_name = ""
+                user_id = ""
+                if is_auth:
+                    profile = spotify.user_profile or spotify.get_current_user_profile()
+                    user_id = profile.get("id", "Unknown")
+                    display_name = profile.get("display_name") or user_id
                     user_info = {
-                        "id": profile.get("id", "Unknown"),
-                        "display_name": profile.get("display_name", ""),
+                        "id": user_id,
+                        "display_name": display_name,
                     }
-                except Exception:
-                    is_auth = False
 
                 self._send_json_response({
                     "authenticated": is_auth,
+                    "display_name": display_name if is_auth else None,
+                    "user_id": user_id if is_auth else None,
                     "user": user_info,
                 })
             except Exception as e:
                 self._send_error_response(f"Failed to retrieve Spotify status: {e}")
+            return
+
+        if path == "/api/spotify/auth/start":
+            try:
+                spotify = SpotifyClient()
+                auth_url = spotify.get_authorize_url()
+                start_oauth_callback_listener(spotify.redirect_uri)
+                self._send_json_response({"auth_url": auth_url})
+            except Exception as e:
+                self._send_error_response(f"Failed to initiate Spotify authentication: {e}")
             return
 
         self._send_error_response(f"Endpoint not found: {self.path}", status=HTTPStatus.NOT_FOUND)
@@ -330,12 +343,202 @@ class APIServerHandler(BaseHTTPRequestHandler):
                 self._send_error_response(f"Playlist creation failed: {e}")
             return
 
+        if path == "/api/spotify/auth/disconnect":
+            try:
+                spotify = SpotifyClient()
+                spotify.disconnect()
+                self._send_json_response({"success": True})
+            except Exception as e:
+                self._send_error_response(f"Failed to disconnect Spotify: {e}")
+            return
+
         self._send_error_response(f"Endpoint not found: {self.path}", status=HTTPStatus.NOT_FOUND)
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress noisy default logging in standard runs."""
         if os.environ.get("SERVER_DEBUG", "").lower() in ("1", "true"):
             super().log_message(format, *args)
+
+
+class OAuthCallbackHandler(BaseHTTPRequestHandler):
+    """Handles Spotify OAuth authorization code callbacks."""
+
+    def do_GET(self) -> None:
+        parsed_url = urlparse(self.path)
+        query = parse_qs(parsed_url.query)
+
+        if "error" in query:
+            error_desc = query.get("error", ["Authorization failed"])[0]
+            self._render_page(
+                title="Spotify Authentication Failed",
+                icon="✕",
+                icon_bg="#f43f5e",
+                heading="Spotify Authentication Failed",
+                message=f"Spotify returned an error: {error_desc}. You can close this window and try again.",
+                badge="Authorization Error",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        code = query.get("code", [""])[0]
+        if not code:
+            self._render_page(
+                title="Missing Authorization Code",
+                icon="✕",
+                icon_bg="#f43f5e",
+                heading="Missing Authorization Code",
+                message="No authorization code was found in the Spotify redirect. Please try again.",
+                badge="Invalid Callback",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        try:
+            spotify = SpotifyClient()
+            profile = spotify.exchange_code_for_token(code)
+            display_name = profile.get("display_name") or profile.get("id", "Spotify User")
+            self._render_page(
+                title="Spotify Connected",
+                icon="✓",
+                icon_bg="#1db954",
+                heading="Spotify Connected!",
+                message="Authentication was successful. You can close this window and return to the Mood Playlist Generator.",
+                badge=f"Connected as {display_name}",
+                status=HTTPStatus.OK,
+                auto_close=True,
+            )
+        except Exception as e:
+            self._render_page(
+                title="Token Exchange Failed",
+                icon="✕",
+                icon_bg="#f43f5e",
+                heading="Token Exchange Failed",
+                message=f"Failed to complete authentication: {e}",
+                badge="Exchange Error",
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def _render_page(
+        self,
+        title: str,
+        icon: str,
+        icon_bg: str,
+        heading: str,
+        message: str,
+        badge: str,
+        status: int = HTTPStatus.OK,
+        auto_close: bool = False,
+    ) -> None:
+        auto_close_script = "<script>setTimeout(() => { window.close(); }, 3500);</script>" if auto_close else ""
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <style>
+    body {{
+      background: #0d0e12;
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      padding: 1rem;
+      box-sizing: border-box;
+    }}
+    .card {{
+      background: #16181f;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      text-align: center;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+    }}
+    .icon {{
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: {icon_bg};
+      color: #000000;
+      font-size: 2rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.25rem;
+    }}
+    h1 {{
+      margin: 0 0 0.5rem;
+      font-size: 1.5rem;
+      color: #ffffff;
+    }}
+    p {{
+      color: #9ca3af;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin: 0 0 1.5rem;
+    }}
+    .badge {{
+      display: inline-block;
+      background: rgba(29, 185, 84, 0.12);
+      border: 1px solid rgba(29, 185, 84, 0.3);
+      color: #4ade80;
+      padding: 0.4rem 1rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">{icon}</div>
+    <h1>{heading}</h1>
+    <p>{message}</p>
+    <div class="badge">{badge}</div>
+  </div>
+  {auto_close_script}
+</body>
+</html>"""
+        response_bytes = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(response_bytes)))
+        self.end_headers()
+        self.wfile.write(response_bytes)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        if os.environ.get("SERVER_DEBUG", "").lower() in ("1", "true"):
+            super().log_message(format, *args)
+
+
+_CALLBACK_SERVER: Optional[ThreadingHTTPServer] = None
+_CALLBACK_LOCK = threading.Lock()
+
+
+def start_oauth_callback_listener(redirect_uri: str) -> None:
+    """Start local background callback listener for the registered redirect URI."""
+    global _CALLBACK_SERVER
+    parsed = urlparse(redirect_uri)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 8888
+
+    with _CALLBACK_LOCK:
+        if _CALLBACK_SERVER is not None:
+            return
+        try:
+            server = ThreadingHTTPServer((host, port), OAuthCallbackHandler)
+            _CALLBACK_SERVER = server
+            t = threading.Thread(target=server.serve_forever, daemon=True)
+            t.start()
+        except OSError:
+            # Port may already be in use or bound
+            pass
 
 
 def create_api_server(host: str = "127.0.0.1", port: int = 5000) -> ThreadingHTTPServer:

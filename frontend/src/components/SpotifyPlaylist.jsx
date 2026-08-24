@@ -8,6 +8,8 @@ export function SpotifyPlaylist({
   onResolutionDone,
   playlistResult,
   onPlaylistCreated,
+  spotifyStatus,
+  onConnectSpotify,
   disabled,
 }) {
   const [resolving, setResolving] = useState(false);
@@ -22,8 +24,15 @@ export function SpotifyPlaylist({
     );
   }
 
+  const isAuth = spotifyStatus?.authenticated;
+
   // Handle resolving songs against Spotify catalog
   const handleResolve = async () => {
+    if (!isAuth) {
+      setError('Please connect your Spotify account first.');
+      return;
+    }
+
     setResolving(true);
     setError(null);
 
@@ -39,6 +48,11 @@ export function SpotifyPlaylist({
 
   // Handle creating Spotify playlist with resolved tracks
   const handleCreatePlaylist = async () => {
+    if (!isAuth) {
+      setError('Please connect your Spotify account first.');
+      return;
+    }
+
     if (!resolutionResult || resolutionResult.resolved.length === 0) {
       setError('Cannot create playlist: no tracks have been resolved.');
       return;
@@ -77,10 +91,37 @@ export function SpotifyPlaylist({
             {parsedSongs.length} Songs
           </span>
         </div>
+        {spotifyStatus?.user && (
+          <div className="spotify-summary-item">
+            <span className="summary-label">Spotify Account</span>
+            <span className="summary-value" style={{ color: '#1db954' }}>
+              {spotifyStatus.user.display_name || spotifyStatus.user.id}
+            </span>
+          </div>
+        )}
       </div>
 
+      {/* Unauthenticated Callout */}
+      {!isAuth && (
+        <div className="unauthenticated-callout" style={{ marginTop: '1.25rem' }}>
+          <div>
+            <strong>Spotify Account Not Connected</strong>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Authorize Spotify in your browser to search tracks and save the playlist to your library.
+            </p>
+          </div>
+          <button
+            id="step5-connect-spotify-btn"
+            className="btn btn-primary"
+            onClick={onConnectSpotify}
+          >
+            Connect Spotify
+          </button>
+        </div>
+      )}
+
       {/* Track Resolution Phase */}
-      {!resolutionResult && !isCreated && (
+      {!resolutionResult && !isCreated && isAuth && (
         <div className="resolution-prompt-action" style={{ marginTop: '1.25rem' }}>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
             Search Spotify's catalog to match song titles and artists to authoritative Spotify track URIs.
@@ -141,7 +182,7 @@ export function SpotifyPlaylist({
               <button
                 id="create-playlist-btn"
                 className="btn btn-primary btn-large"
-                disabled={creating}
+                disabled={creating || !isAuth}
                 onClick={handleCreatePlaylist}
               >
                 {creating

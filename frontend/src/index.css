@@ -121,6 +121,12 @@ h1, h2, h3, h4 {
   margin-top: 1.25rem;
 }
 
+.header-auth-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 /* Workflow Stepper */
 .workflow-stepper {
   display: flex;
@@ -307,6 +313,23 @@ h1, h2, h3, h4 {
 .btn-large {
   padding: 0.85rem 1.75rem;
   font-size: 0.95rem;
+}
+
+.btn-tiny {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.btn-spotify {
+  background: var(--accent-spotify);
+  color: #000000;
+}
+
+.btn-spotify:hover:not(:disabled) {
+  background: var(--accent-spotify-hover);
+  box-shadow: 0 0 12px rgba(29, 185, 84, 0.4);
 }
 
 .btn-primary {
@@ -730,6 +753,18 @@ h1, h2, h3, h4 {
 
 .summary-value.highlight {
   color: var(--accent-spotify-hover);
+}
+
+.unauthenticated-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md);
 }
 
 .resolution-results-card {

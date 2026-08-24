@@ -86,6 +86,53 @@ export function App() {
     initApp();
   }, []);
 
+  const refreshSpotifyStatus = async () => {
+    try {
+      const spot = await api.getSpotifyStatus();
+      setSpotifyStatus({
+        authenticated: spot.authenticated,
+        loading: false,
+        user: spot.user || (spot.display_name ? { id: spot.user_id, display_name: spot.display_name } : null),
+      });
+      return spot.authenticated;
+    } catch {
+      setSpotifyStatus({
+        authenticated: false,
+        loading: false,
+        user: null,
+      });
+      return false;
+    }
+  };
+
+  const handleConnectSpotify = async () => {
+    try {
+      const { auth_url } = await api.startSpotifyAuth();
+      const authWindow = window.open(auth_url, 'SpotifyOAuth', 'width=600,height=750,menubar=no,toolbar=no');
+
+      // Poll Spotify status until connected or window closed
+      const interval = setInterval(async () => {
+        const isAuth = await refreshSpotifyStatus();
+        if (isAuth || (authWindow && authWindow.closed)) {
+          clearInterval(interval);
+        }
+      }, 1500);
+    } catch (err) {
+      alert(err.message || 'Failed to start Spotify authentication.');
+    }
+  };
+
+  const handleDisconnectSpotify = async () => {
+    try {
+      await api.disconnectSpotify();
+      await refreshSpotifyStatus();
+      setResolutionResult(null);
+      setPlaylistResult(null);
+    } catch (err) {
+      alert(err.message || 'Failed to disconnect Spotify.');
+    }
+  };
+
   // Invalidation handlers for progressive selection
   const resetDownstream = () => {
     setProfile(null);
@@ -202,15 +249,35 @@ export function App() {
 
           {!spotifyStatus.loading && (
             spotifyStatus.authenticated ? (
-              <span className="status-pill status-spotify-connected" title={`Logged in as ${spotifyStatus.user?.display_name || spotifyStatus.user?.id}`}>
-                <span className="status-dot" style={{ background: '#1db954' }}></span>
-                Spotify: {spotifyStatus.user?.display_name || 'Connected'}
-              </span>
+              <div className="header-auth-group">
+                <span className="status-pill status-spotify-connected" title={`Logged in as ${spotifyStatus.user?.display_name || spotifyStatus.user?.id}`}>
+                  <span className="status-dot" style={{ background: '#1db954' }}></span>
+                  Spotify: {spotifyStatus.user?.display_name || 'Connected'}
+                  {spotifyStatus.user?.id && <span style={{ opacity: 0.7, marginLeft: '4px' }}>({spotifyStatus.user.id})</span>}
+                </span>
+                <button
+                  id="disconnect-spotify-btn"
+                  className="btn btn-tiny btn-secondary"
+                  onClick={handleDisconnectSpotify}
+                  title="Disconnect Spotify account"
+                >
+                  Disconnect
+                </button>
+              </div>
             ) : (
-              <span className="status-pill status-spotify-disconnected" title="Set credentials in set-spotify-env.sh">
-                <span className="status-dot" style={{ background: '#f59e0b' }}></span>
-                Spotify: Not Authenticated
-              </span>
+              <div className="header-auth-group">
+                <span className="status-pill status-spotify-disconnected" title="Connect your Spotify account">
+                  <span className="status-dot" style={{ background: '#f59e0b' }}></span>
+                  Spotify: Not Connected
+                </span>
+                <button
+                  id="connect-spotify-btn"
+                  className="btn btn-tiny btn-spotify"
+                  onClick={handleConnectSpotify}
+                >
+                  Connect Spotify
+                </button>
+              </div>
             )
           )}
         </div>
@@ -395,6 +462,8 @@ export function App() {
             onResolutionDone={(res) => setResolutionResult(res)}
             playlistResult={playlistResult}
             onPlaylistCreated={(res) => setPlaylistResult(res)}
+            spotifyStatus={spotifyStatus}
+            onConnectSpotify={handleConnectSpotify}
             disabled={!parsedSongs || parsedSongs.length === 0}
           />
         </section>
