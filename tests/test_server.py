@@ -129,6 +129,53 @@ class TestAPIServerHandler(unittest.TestCase):
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["songs"][0]["title"], "September")
 
+    def test_song_parse_csv_and_yaml(self):
+        # CSV format
+        csv_text = "title,artist\n\"Levitating\",\"Dua Lipa\"\n\"24K Magic\",\"Bruno Mars\""
+        status, data = execute_request("POST", "/api/songs/parse", body={
+            "raw_text": csv_text,
+            "format_hint": "csv",
+        })
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["count"], 2)
+
+        # YAML format
+        yaml_text = "songs:\n  - title: \"Golden\"\n    artist: \"Jill Scott\""
+        status, data = execute_request("POST", "/api/songs/parse", body={
+            "raw_text": yaml_text,
+            "format_hint": "yaml",
+        })
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["count"], 1)
+
+    def test_song_parse_empty_response(self):
+        status, data = execute_request("POST", "/api/songs/parse", body={
+            "raw_text": "   ",
+        })
+        self.assertEqual(status, HTTPStatus.UNPROCESSABLE_ENTITY)
+        self.assertFalse(data["valid"])
+        self.assertIn("empty", data["error"].lower())
+
+    def test_song_parse_invalid_json(self):
+        status, data = execute_request("POST", "/api/songs/parse", body={
+            "raw_text": "{ invalid json",
+            "format_hint": "json",
+        })
+        self.assertEqual(status, HTTPStatus.UNPROCESSABLE_ENTITY)
+        self.assertFalse(data["valid"])
+        self.assertIn("JSON", data["error"])
+
+    def test_song_parse_missing_artist_or_title(self):
+        status, data = execute_request("POST", "/api/songs/parse", body={
+            "raw_text": '{"songs": [{"title": "Only Title"}]}',
+            "format_hint": "json",
+        })
+        self.assertEqual(status, HTTPStatus.UNPROCESSABLE_ENTITY)
+        self.assertFalse(data["valid"])
+        self.assertIn("artist", data["error"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

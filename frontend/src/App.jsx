@@ -3,6 +3,7 @@ import { api } from './api/client';
 import { MoodSelection } from './components/MoodSelection';
 import { MoodProfileView } from './components/MoodProfileView';
 import { PromptView } from './components/PromptView';
+import { SongImport } from './components/SongImport';
 
 export function App() {
   const [backendStatus, setBackendStatus] = useState({
@@ -30,6 +31,9 @@ export function App() {
   const [promptData, setPromptData] = useState(null);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [promptError, setPromptError] = useState(null);
+
+  // Imported Songs State
+  const [parsedSongs, setParsedSongs] = useState(null);
 
   useEffect(() => {
     async function initApp() {
@@ -61,39 +65,35 @@ export function App() {
   }, []);
 
   // Invalidation handlers for progressive selection
-  const handleSelectCore = (coreName) => {
-    setSelectedCore(coreName);
-    setSelectedBranch('');
-    setSelectedSpecific('');
+  const resetDownstream = () => {
     setProfile(null);
     setProfileError(null);
     setPromptData(null);
     setPromptError(null);
+    setParsedSongs(null);
+  };
+
+  const handleSelectCore = (coreName) => {
+    setSelectedCore(coreName);
+    setSelectedBranch('');
+    setSelectedSpecific('');
+    resetDownstream();
   };
 
   const handleSelectBranch = (branchName) => {
     setSelectedBranch(branchName);
     setSelectedSpecific('');
-    setProfile(null);
-    setProfileError(null);
-    setPromptData(null);
-    setPromptError(null);
+    resetDownstream();
   };
 
   const handleSelectSpecific = (specificName) => {
     setSelectedSpecific(specificName);
-    setProfile(null);
-    setProfileError(null);
-    setPromptData(null);
-    setPromptError(null);
+    resetDownstream();
   };
 
   const handleSelectIntensity = (intensityVal) => {
     setIntensity(intensityVal);
-    setProfile(null);
-    setProfileError(null);
-    setPromptData(null);
-    setPromptError(null);
+    resetDownstream();
   };
 
   const fetchPrompt = async (targetProfile) => {
@@ -115,6 +115,7 @@ export function App() {
     setLoadingProfile(true);
     setProfileError(null);
     setPromptData(null);
+    setParsedSongs(null);
 
     try {
       const generatedProfile = await api.generateProfile({
@@ -124,7 +125,7 @@ export function App() {
         intensity: intensity,
       });
       setProfile(generatedProfile);
-      // Immediately request prompt generation from backend using authoritative config and profile
+      // Immediately request prompt generation from backend
       await fetchPrompt(generatedProfile);
     } catch (err) {
       setProfileError(err.message || 'Failed to generate mood profile.');
@@ -242,20 +243,32 @@ export function App() {
         </section>
 
         {/* Step 4: Song Recommendations */}
-        <section className="card" id="step-import" style={{ opacity: 0.6 }}>
+        <section className="card" id="step-import" style={{ opacity: promptData ? 1 : 0.6 }}>
           <div className="card-header">
             <div>
               <span className="card-step-badge">Step 4</span>
               <h2 className="card-title">Song Recommendations</h2>
             </div>
+            {parsedSongs && (
+              <span className="status-pill status-online">
+                <span className="status-dot"></span>
+                {parsedSongs.length} Songs Imported
+              </span>
+            )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Paste the chatbot's machine-readable response to validate and prepare for Spotify resolution.
-          </p>
+
+          <SongImport
+            config={config}
+            promptData={promptData}
+            parsedSongs={parsedSongs}
+            onSongsParsed={(songs) => setParsedSongs(songs)}
+            onClearSongs={() => setParsedSongs(null)}
+            disabled={!promptData}
+          />
         </section>
 
         {/* Step 5: Spotify Resolution & Playlist */}
-        <section className="card" id="step-spotify" style={{ opacity: 0.6 }}>
+        <section className="card" id="step-spotify" style={{ opacity: parsedSongs ? 1 : 0.6 }}>
           <div className="card-header">
             <div>
               <span className="card-step-badge">Step 5</span>

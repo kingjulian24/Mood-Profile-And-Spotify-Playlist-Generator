@@ -42,6 +42,9 @@ This project serves as an implementation for **Context System Design (v0.1)**:
 6. **Security & Credential Isolation:**
    Spotify client IDs, client secrets, and access tokens are strictly managed by the Python backend via environment variables and never exposed to the frontend browser application.
 
+7. **Validation Before Ingestion:**
+   The external chatbot generates song recommendations outside the application. The application does not trust raw chatbot responses as valid application data until they have been parsed, structured, and validated by the backend (`src/song_parser.py`).
+
 ---
 
 ## 3. Architecture & Data Flow
