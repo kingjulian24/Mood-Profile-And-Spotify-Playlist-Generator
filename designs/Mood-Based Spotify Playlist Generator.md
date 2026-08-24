@@ -894,8 +894,3 @@ AI reasoning
 External validation
         ↓
 Observable output
-```
-
-This makes the application a practical test of the central premise of **Context System Design**:
-
-> **The quality of an AI system's output depends not only on the capability of the model, but on the quality of the context supplied to it.**
