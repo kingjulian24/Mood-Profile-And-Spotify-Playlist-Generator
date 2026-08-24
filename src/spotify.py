@@ -165,14 +165,24 @@ class SpotifyClient:
             return False
 
     def _save_cached_token(self, token_data: Dict[str, Any]) -> None:
-        """Save tokens to disk cache."""
+        """Save tokens to disk cache with restricted owner-only permissions (0600)."""
         try:
             to_save = dict(token_data)
             if self.client_id:
                 to_save["client_id"] = self.client_id
             to_save["cached_at"] = time.time()
-            with open(self.token_cache_path, "w", encoding="utf-8") as f:
+            parent = self.token_cache_path.parent
+            parent.mkdir(parents=True, exist_ok=True)
+
+            # Write file with owner-only read/write permissions
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            fd = os.open(self.token_cache_path, flags, 0o600)
+            with open(fd, "w", encoding="utf-8") as f:
                 json.dump(to_save, f)
+            try:
+                os.chmod(self.token_cache_path, 0o600)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -274,7 +284,7 @@ class SpotifyClient:
         """Return True if active token is valid."""
         return self.validate_cached_token()
 
-    def get_authorize_url(self) -> str:
+    def get_authorize_url(self, state: Optional[str] = None) -> str:
         """Construct the Spotify OAuth authorization URL."""
         if not self.client_id:
             raise SpotifyAuthError(
@@ -287,6 +297,8 @@ class SpotifyClient:
             "scope": DEFAULT_SCOPE,
             "show_dialog": "true",
         }
+        if state:
+            params["state"] = state
         return f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
     def exchange_code_for_token(self, code: str) -> Dict[str, Any]:

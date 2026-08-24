@@ -3,8 +3,10 @@
 from __future__ import annotations
 import json
 import os
+import secrets
 import sys
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
@@ -18,10 +20,16 @@ from src.spotify import SpotifyClient, SpotifyError
 from src.taxonomy import MoodTaxonomy
 
 
+# Pending OAuth states for CSRF protection (state -> created_timestamp)
+_PENDING_OAUTH_STATES: Dict[str, float] = {}
+_OAUTH_STATE_LOCK = threading.Lock()
+
+
 class APIServerHandler(BaseHTTPRequestHandler):
     """Handles REST API requests from the React GUI."""
 
     taxonomy = MoodTaxonomy()
+    MAX_REQUEST_BODY_SIZE = 1_048_576  # 1 MB
 
     def _set_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -50,8 +58,10 @@ class APIServerHandler(BaseHTTPRequestHandler):
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", 0))
-        if content_length == 0:
+        if content_length <= 0:
             return {}
+        if content_length > self.MAX_REQUEST_BODY_SIZE:
+            raise ValueError(f"Request body exceeds maximum size of {self.MAX_REQUEST_BODY_SIZE} bytes.")
         raw_body = self.rfile.read(content_length).decode("utf-8")
         try:
             return json.loads(raw_body)
@@ -150,7 +160,17 @@ class APIServerHandler(BaseHTTPRequestHandler):
         if path == "/api/spotify/auth/start":
             try:
                 spotify = SpotifyClient()
-                auth_url = spotify.get_authorize_url()
+                # Generate cryptographically secure OAuth state parameter
+                state = secrets.token_urlsafe(24)
+                with _OAUTH_STATE_LOCK:
+                    # Evict expired states (> 10 minutes)
+                    now = time.time()
+                    expired = [s for s, t in _PENDING_OAUTH_STATES.items() if now - t > 600]
+                    for s in expired:
+                        _PENDING_OAUTH_STATES.pop(s, None)
+                    _PENDING_OAUTH_STATES[state] = now
+
+                auth_url = spotify.get_authorize_url(state=state)
                 start_oauth_callback_listener(spotify.redirect_uri)
                 self._send_json_response({"auth_url": auth_url})
             except Exception as e:
@@ -361,7 +381,7 @@ class APIServerHandler(BaseHTTPRequestHandler):
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
-    """Handles Spotify OAuth authorization code callbacks."""
+    """Handles Spotify OAuth authorization code callbacks with CSRF state verification."""
 
     def do_GET(self) -> None:
         parsed_url = urlparse(self.path)
@@ -379,6 +399,28 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
+
+        # CSRF State Validation
+        state = query.get("state", [""])[0]
+        now = time.time()
+        with _OAUTH_STATE_LOCK:
+            # Clean expired states (> 10 minutes)
+            expired = [s for s, t in _PENDING_OAUTH_STATES.items() if now - t > 600]
+            for s in expired:
+                _PENDING_OAUTH_STATES.pop(s, None)
+
+            if not state or state not in _PENDING_OAUTH_STATES:
+                self._render_page(
+                    title="Invalid OAuth State",
+                    icon="✕",
+                    icon_bg="#f43f5e",
+                    heading="Invalid or Expired OAuth Session",
+                    message="The OAuth state parameter is invalid or has expired. Please initiate authentication again from the application.",
+                    badge="CSRF Verification Failed",
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            _PENDING_OAUTH_STATES.pop(state, None)
 
         code = query.get("code", [""])[0]
         if not code:
