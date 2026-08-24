@@ -39,6 +39,76 @@ Context Delivery        Application creates and populates the Spotify playlist
 
 ---
 
+## Architecture
+
+```text
+                         USER
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+      React GUI (frontend/)       Interactive CLI
+              │                         │
+              │ HTTP (JSON REST)        │ Direct Python Calls
+              ▼                         ▼
+      Python API Server (src/server.py) │
+              │                         │
+              └────────────┬────────────┘
+                           ▼
+  ┌──────────────────────────────────────────────────┐
+  │         Shared Python Application Logic          │
+  │                                                  │
+  │  • Taxonomy Traversal (src/taxonomy.py)          │
+  │  • Context Modeling & Data Models (src/models.py)│
+  │  • Machine-Readable Prompts (src/prompt.py)      │
+  │  • Song Parser & Ingestion (src/song_parser.py)  │
+  │  • Deterministic Spotify Client (src/spotify.py) │
+  └──────────────┬───────────────────┬───────────────┘
+                 │                   │
+  ┌──────────────┴──────────────┐    │
+  ▼                             ▼    ▼
+Mood Taxonomy                Config & Secrets
+context/mood-taxonomy.json   • config.json (song_count, format)
+                             • Environment (SPOTIFY_CLIENT_ID, ...)
+                                     │
+                                     ▼
+                           Recommendation Prompt
+                             (JSON / CSV / YAML)
+                                     │
+                                     ▼ (Outside Application)
+                             External Chatbot
+                        (ChatGPT, Claude, Gemini)
+                                     │
+                                     ▼
+                          Song Recommendations
+                             (Raw Song List)
+                                     │
+                                     ▼
+                            Song Parser & Validator
+                             (src/song_parser.py)
+                                     │
+                                     ▼
+                             Spotify Web API
+                           (api.spotify.com)
+                                     │
+                                     ▼
+                             Spotify Playlist
+                   (Populated with Resolved Tracks)
+```
+
+### End-to-End Workflow
+
+1. **Deterministic Mood Selection:** The user selects their emotional state (Core Emotion → Branch → Specific Emotion → Intensity 1–10) through either the React GUI or the interactive CLI.
+2. **Context Modeling:** The application structures the selections into an authoritative `MoodProfile` and canonical mood code (e.g. `J-3-1:8`).
+3. **Prompt Generation:** The application deterministically formats a structured, machine-readable recommendation prompt according to `config.json` (`song_count`, `output_format`).
+4. **External AI Reasoning:** The user copies and submits the prompt to an external chatbot of their choice (ChatGPT, Claude, Gemini, etc.).
+5. **Machine-Readable Response:** The chatbot returns song recommendations formatted strictly as `JSON`, `CSV`, or `YAML`.
+6. **Song Ingestion & Validation:** The user imports the response into the application, which validates structure and required fields (`title`, `artist`).
+7. **Spotify Track Resolution:** The application deterministically searches Spotify's catalog to resolve track URIs, gracefully reporting any unresolved items.
+8. **Playlist Creation:** The application creates a named Spotify playlist (e.g., `Joy — Excited — Energetic — Aug 23, 2026 3:42 PM`) and populates it with all resolved tracks.
+
+---
+
 ## Key Features
 
 * **Authoritative Human Emotion:** The user explicitly chooses their core emotion, branch, specific emotion, and intensity.
