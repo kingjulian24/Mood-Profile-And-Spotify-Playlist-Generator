@@ -1,16 +1,3 @@
-Yes. At this point, a design document makes more sense than immediately creating tasks. The CLI has established the application behavior; the GUI should be a presentation layer over that existing workflow rather than a redesign of the underlying system.
-
-I would keep the first version deliberately small:
-
-**Mood selection → Mood profile → Recommendation prompt → Song response → Spotify resolution → Playlist → Status**
-
-And importantly, **no LLM inside the application**. The external chatbot remains the recommendation engine.
-
-# Design Document
-
-**Filename:** `Mood-Based-Spotify-Playlist-Generator-GUI.md`
-
-````markdown
 # Mood-Based Spotify Playlist Generator — GUI Design
 
 > **Status:** Draft
@@ -732,23 +719,3 @@ The CLI may remain available for development, testing, and automation.
 
 The GUI becomes the primary user interface for normal use.
 
-```
-
-## Tasks I'd create from this
-
-I would **not** make one giant "build GUI" task. I'd break it into a few controlled tasks:
-
-| Task | Purpose |
-|---|---|
-| **012 — Initialize GUI Architecture** | Set up React/frontend structure and establish the frontend/backend boundary |
-| **013 — Implement Mood Selection UI** | Replace the CLI mood-selection interaction with the GUI |
-| **014 — Implement Mood Profile & Prompt UI** | Display the profile and provide the copyable prompt |
-| **015 — Implement Song Import UI** | Paste/import chatbot response and display validation |
-| **016 — Integrate Spotify Workflow** | Connect the GUI to song resolution and playlist creation |
-| **017 — Implement Application Status & Error UI** | Give the workflow coherent progress/error states |
-| **018 — GUI Polish & Responsive Design** | Dark theme, layout, accessibility, responsive behavior |
-
-I would start with **Task 012**, because there's an architectural question we shouldn't let the agent casually decide while implementing everything else: **how the React frontend communicates with the existing Python application**.
-
-That is the one part I'd explicitly design before handing the implementation over to the agent.
-```
